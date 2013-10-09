@@ -4,6 +4,7 @@
 /Makefile.in
 /aclocal.m4
 /autom4te.cache/
+/build-aux
 /build-aux/
 /config.h
 /config.h.in
@@ -12,4 +13,7 @@
 /configure
 /f5gs
 /f5gs.o
+/lib/
+/libtool
+/m4/
 /stamp-h1

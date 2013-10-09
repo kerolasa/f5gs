@@ -22,6 +22,9 @@ AM_INIT_AUTOMAKE([
 AC_USE_SYSTEM_EXTENSIONS
 AC_C_RESTRICT
 AC_PROG_CC
+gl_EARLY
+gl_INIT
+LT_INIT
 
 # Checks for libraries.
 
@@ -35,5 +38,7 @@ AC_TYPE_SSIZE_T
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([munmap socket])
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile
+		lib/Makefile
+])
 AC_OUTPUT

@@ -3,6 +3,8 @@
  * Sami Kerola <sami.kerola@sabre.com>
  */
 
+#include "config.h"
+
 #include <arpa/inet.h>
 #include <err.h>
 #include <errno.h>
@@ -20,6 +22,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include "close-stream.h"
+#include "closeout.h"
+#include "progname.h"
 
 #define STATE_FILE	"f5gs.conf"
 #define BUF_SIZE             1024
@@ -59,6 +65,9 @@ int main(int argc, char **argv)
 	pthread_attr_t attr;
 	pthread_t threads;
 	int fd;
+
+	set_program_name(argv[0]);
+	atexit(close_stdout);
 
 	server_s = socket(AF_INET, SOCK_STREAM, 0);
 	server_addr.sin_family = AF_INET;
