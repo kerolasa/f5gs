@@ -28,27 +28,24 @@
 #include "progname.h"
 
 #define STATE_FILE	"f5gs.conf"
-#define BUF_SIZE             1024
 #define PORT_NUM            32546	/* f5 == in octal */
 #define PEND_CONNECTIONS      128	/* pending connections to hold */
 
-int client_s;
 long pagesz;
 void *message;
 
 /* child thread */
 void *response_thread(void *arg)
 {
-	char in_buf[BUF_SIZE];
+	char in_buf[pagesz];
 	ssize_t retcode;
+	int client_s = (*(int *)arg);
 
+	send(client_s, message, pagesz, 0);
 	/* let the client send, and ignore */
-	retcode = recv(client_s, in_buf, BUF_SIZE, 0);
-
+	retcode = recv(client_s, in_buf, pagesz, 0);
 	if (retcode < 0)
 		printf("recv error\n");
-	else
-		send(client_s, message, pagesz, 0);
 	close(client_s);
 	pthread_exit(NULL);
 	/* should be impossible to reach */
@@ -86,6 +83,7 @@ int main(int argc, char **argv)
 
 	pthread_attr_init(&attr);
 	while (1) {
+		int client_s;
 		addr_len = sizeof(client_addr);
 		client_s = accept(server_s, (struct sockaddr *)&client_addr, &addr_len);
 
