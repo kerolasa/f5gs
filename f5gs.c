@@ -26,7 +26,7 @@
 #define PORT_NUM            32546	/* f5 == in octal */
 #define PEND_CONNECTIONS      128	/* pending connections to hold */
 
-unsigned int client_s;
+int client_s;
 long pagesz;
 void *message;
 
