@@ -15,24 +15,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#define STATE_FILE	"f5gs.conf"
 #define BUF_SIZE             1024
 #define PORT_NUM            32546	/* f5 == in octal */
 #define PEND_CONNECTIONS      128	/* pending connections to hold */
 
 unsigned int client_s;
+long pagesz;
+void *message;
 
 /* child thread */
 void *response_thread(void *arg)
 {
 	char in_buf[BUF_SIZE];
-	char out_buf[BUF_SIZE];
-	unsigned int fh;
-	unsigned int buf_len;
 	ssize_t retcode;
 
 	/* let the client send, and ignore */
@@ -40,26 +41,11 @@ void *response_thread(void *arg)
 
 	if (retcode < 0)
 		printf("recv error\n");
-	else {
-		fh = open("/etc/f5gs.conf", O_RDONLY);
-
-		if (fh == -1) {
-			strcpy(out_buf, "UNKNOWN\n");
-			send(client_s, out_buf, strlen(out_buf), 0);
-		} else {
-			buf_len = 1;
-			while (0 < buf_len) {
-				buf_len = read(fh, out_buf, BUF_SIZE);
-				if (0 < buf_len)
-					send(client_s, out_buf, buf_len, 0);
-			}
-
-			close(fh);
-		}
-	}
-        close(client_s);
-        pthread_exit(NULL);
-        /* should be impossible to reach */
+	else
+		send(client_s, message, pagesz, 0);
+	close(client_s);
+	pthread_exit(NULL);
+	/* should be impossible to reach */
 	return 0;
 }
 
@@ -72,22 +58,27 @@ int main(int argc, char **argv)
 	unsigned int ids;
 	pthread_attr_t attr;
 	pthread_t threads;
+	int fd;
 
 	server_s = socket(AF_INET, SOCK_STREAM, 0);
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(PORT_NUM);
 	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	if (bind(server_s, (struct sockaddr *)&server_addr, sizeof(server_addr)))
-	        err(EXIT_FAILURE, "unable to bind");
+		err(EXIT_FAILURE, "unable to bind");
 	if (listen(server_s, PEND_CONNECTIONS))
-	        err(EXIT_FAILURE, "unable to listen");
+		err(EXIT_FAILURE, "unable to listen");
+
+	pagesz = sysconf(_SC_PAGESIZE);
+	fd = open(STATE_FILE, O_RDONLY);
+	if (fd < 0)
+		err(EXIT_FAILURE, "cannot open file: %s", STATE_FILE);
+	message = mmap(NULL, pagesz, PROT_READ, MAP_SHARED, fd, 0);
 
 	pthread_attr_init(&attr);
 	while (1) {
 		addr_len = sizeof(client_addr);
-		client_s =
-		    accept(server_s, (struct sockaddr *)&client_addr,
-			   &addr_len);
+		client_s = accept(server_s, (struct sockaddr *)&client_addr, &addr_len);
 
 		if (client_s < 0)
 			err(EXIT_FAILURE, "unable to create socket");
@@ -98,6 +89,7 @@ int main(int argc, char **argv)
 		}
 	}
 
+	munmap(message, pagesz);
 	close(server_s);
 	return EXIT_SUCCESS;
 }
