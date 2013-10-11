@@ -104,7 +104,8 @@ int main(int argc, char **argv)
 	    signal(SIGWINCH, catch_enable) == SIG_ERR)
 		err(EXIT_FAILURE, "cannot set signal handler");
 
-	retcode =  server_s = socket(AF_INET, SOCK_STREAM, 0);
+	if (!(server_s = socket(AF_INET, SOCK_STREAM, 0)))
+		err(EXIT_FAILURE, "cannot create socket");
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(PORT_NUM);
 	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
