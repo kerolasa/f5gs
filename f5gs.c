@@ -27,29 +27,60 @@
 #include "closeout.h"
 #include "progname.h"
 
-#define STATE_FILE	"f5gs.conf"
-#define PORT_NUM            32546	/* f5 == in octal */
+#define PORT_NUM	    32546	/* f5 == in octal */
 #define PEND_CONNECTIONS      128	/* pending connections to hold */
+#define IGNORE_BYTES	      256
 
-long pagesz;
-void *message;
+enum {
+	STATE_UNKNOWN,
+	STATE_DISABLE,
+	STATE_MAINTENANCE,
+	STATE_ENABLE
+};
+static const char *state_messages[] = {
+	[STATE_UNKNOWN] = "unknown",
+	[STATE_DISABLE] = "disable",
+	[STATE_MAINTENANCE] = "maintenance",
+	[STATE_ENABLE] = "enable"
+};
+
+static int msg_type;
+static size_t msg_len;
 
 /* child thread */
-void *response_thread(void *arg)
+static void *response_thread(void *arg)
 {
-	char in_buf[pagesz];
+	char in_buf[IGNORE_BYTES];
 	ssize_t retcode;
 	int client_s = (*(int *)arg);
 
-	send(client_s, message, pagesz, 0);
+	send(client_s, state_messages[msg_type], msg_len, 0);
 	/* let the client send, and ignore */
-	retcode = recv(client_s, in_buf, pagesz, 0);
+	retcode = recv(client_s, in_buf, IGNORE_BYTES, 0);
 	if (retcode < 0)
 		printf("recv error\n");
 	close(client_s);
 	pthread_exit(NULL);
 	/* should be impossible to reach */
 	return 0;
+}
+
+static void catch_disable(int signal __attribute__ ((__unused__)))
+{
+	msg_type = STATE_DISABLE;
+	msg_len = strlen(state_messages[STATE_UNKNOWN]);
+}
+
+static void catch_maintenance(int signal __attribute__ ((__unused__)))
+{
+	msg_type = STATE_MAINTENANCE;
+	msg_len = strlen(state_messages[STATE_UNKNOWN]);
+}
+
+static void catch_enable(int signal __attribute__ ((__unused__)))
+{
+	msg_type = STATE_ENABLE;
+	msg_len = strlen(state_messages[STATE_UNKNOWN]);
 }
 
 int main(int argc, char **argv)
@@ -61,12 +92,19 @@ int main(int argc, char **argv)
 	unsigned int ids;
 	pthread_attr_t attr;
 	pthread_t threads;
-	int fd;
 
 	set_program_name(argv[0]);
 	atexit(close_stdout);
 
-	server_s = socket(AF_INET, SOCK_STREAM, 0);
+	msg_type = STATE_UNKNOWN;
+	msg_len = strlen(state_messages[STATE_UNKNOWN]);
+
+	if (signal(SIGUSR1, catch_disable) == SIG_ERR ||
+	    signal(SIGUSR2, catch_maintenance) == SIG_ERR ||
+	    signal(SIGWINCH, catch_enable) == SIG_ERR)
+		err(EXIT_FAILURE, "cannot set signal handler");
+
+	retcode =  server_s = socket(AF_INET, SOCK_STREAM, 0);
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(PORT_NUM);
 	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -74,12 +112,6 @@ int main(int argc, char **argv)
 		err(EXIT_FAILURE, "unable to bind");
 	if (listen(server_s, PEND_CONNECTIONS))
 		err(EXIT_FAILURE, "unable to listen");
-
-	pagesz = sysconf(_SC_PAGESIZE);
-	fd = open(STATE_FILE, O_RDONLY);
-	if (fd < 0)
-		err(EXIT_FAILURE, "cannot open file: %s", STATE_FILE);
-	message = mmap(NULL, pagesz, PROT_READ, MAP_SHARED, fd, 0);
 
 	pthread_attr_init(&attr);
 	while (1) {
@@ -96,7 +128,6 @@ int main(int argc, char **argv)
 		}
 	}
 
-	munmap(message, pagesz);
 	close(server_s);
 	return EXIT_SUCCESS;
 }
