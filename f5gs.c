@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <limits.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <semaphore.h>
@@ -61,7 +62,7 @@ usage(FILE *out)
 	fputs(" -s, --server         start up health check daemon\n", out);
 	fputs(" -l, --listen <addr>  ip address deamon will listen\n", out);
 	fprintf(out, " -p, --port <port>    health check tcp port (default: %d)\n", PORT_NUM);
-	fprintf(out, " -f, --state <file>   path of the state file (default: %s)\n", "/FIXME/f5gs");
+	fprintf(out, "     --state <dir>    path of the state dir (default: %s)\n", F5GS_RUNDIR);
 	fputs("\n", out);
 	fputs(" -h, --help           display this help and exit\n", out);
 	fputs(" -V, --version        output version information and exit\n", out);
@@ -215,6 +216,9 @@ static void run_server(void)
 int main(int argc, char **argv)
 {
 	int c, server = 0;
+	enum {
+		STATEDIR_OPT = CHAR_MAX + 1,
+	};
 
 	static const struct option longopts[] = {
 		{"disable", no_argument, NULL, 'd'},
@@ -223,7 +227,7 @@ int main(int argc, char **argv)
 		{"server", no_argument, NULL, 's'},
 		{"listen", required_argument, NULL, 'l'},
 		{"port", required_argument, NULL, 'p'},
-		{"state", required_argument, NULL, 'f'},
+		{"state", required_argument, NULL, STATEDIR_OPT},
 		{"version", no_argument, NULL, 'V'},
 		{"help", no_argument, NULL, 'h'},
 		{NULL, 0, NULL, 0}
@@ -232,7 +236,7 @@ int main(int argc, char **argv)
 	set_program_name(argv[0]);
 	atexit(close_stdout);
 
-	while ((c = getopt_long(argc, argv, "dmesl:p:f:Vh", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "dmesl:p:Vh", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
 			printf("FIXME: disable");
@@ -252,7 +256,7 @@ int main(int argc, char **argv)
 		case 'p':
 			printf("FIXME: port");
 			break;
-		case 'f':
+		case STATEDIR_OPT:
 			printf("FIXME: state file");
 			break;
 		case 'V':

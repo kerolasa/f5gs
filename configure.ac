@@ -38,6 +38,8 @@ AC_TYPE_SSIZE_T
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([munmap socket])
 
+AC_SUBST([f5gs_rundir], [$runstatedir/$PACKAGE/], [f5gs runtime state directory])
+
 AC_CONFIG_FILES([Makefile
 		lib/Makefile
 ])

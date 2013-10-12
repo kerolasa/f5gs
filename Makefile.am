@@ -1,6 +1,9 @@
 AUTOMAKE_OPTIONS = gnu
 ACLOCAL_AMFLAGS = -I m4
-AM_CPPFLAGS = -I$(top_srcdir)/lib -I$(top_builddir)/lib
+AM_CPPFLAGS = \
+	-I$(top_srcdir)/lib \
+	-I$(top_builddir)/lib \
+	-DF5GS_RUNDIR=\"$(f5gs_rundir)\"
 
 EXTRA_DIST = m4/gnulib-cache.m4
 SUBDIRS = lib
