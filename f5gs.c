@@ -40,6 +40,7 @@ static const char *state_messages[] = {
 	[STATE_ENABLE] = "enable"
 };
 
+pthread_rwlock_t lock;
 static int msg_type;
 static size_t msg_len;
 
@@ -72,7 +73,12 @@ static void *response_thread(void *arg)
 	ssize_t retcode;
 	int client_s = (*(int *)arg);
 
+	if (pthread_rwlock_rdlock(&lock)) {
+		warn("could not get lock");
+		return NULL;
+	}
 	send(client_s, state_messages[msg_type], msg_len, 0);
+	pthread_rwlock_unlock(&lock);
 	/* let the client send, and ignore */
 	retcode = recv(client_s, in_buf, IGNORE_BYTES, 0);
 	if (retcode < 0)
@@ -80,11 +86,15 @@ static void *response_thread(void *arg)
 	close(client_s);
 	pthread_exit(NULL);
 	/* should be impossible to reach */
-	return 0;
+	return NULL;
 }
 
 static void catch_signals(int signal)
 {
+	if (pthread_rwlock_wrlock(&lock)) {
+		warn("could not get lock");
+		return;
+	}
 	switch (signal) {
 	case SIGUSR1:
 		msg_type = STATE_DISABLE;
@@ -100,8 +110,8 @@ static void catch_signals(int signal)
 		abort();
 	}
 	msg_len = strlen(state_messages[msg_type]);
+	pthread_rwlock_unlock(&lock);
 }
-
 
 static void run_server(void)
 {
@@ -113,6 +123,7 @@ static void run_server(void)
 	pthread_attr_t attr;
 	pthread_t threads;
 
+	pthread_rwlock_init(&lock, NULL);
 	msg_type = STATE_UNKNOWN;
 	msg_len = strlen(state_messages[STATE_UNKNOWN]);
 
@@ -146,8 +157,8 @@ static void run_server(void)
 		}
 	}
 
+	pthread_rwlock_destroy(&lock);
 	close(server_s);
-
 }
 
 int main(int argc, char **argv)
