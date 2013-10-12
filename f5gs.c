@@ -201,7 +201,7 @@ static void run_server(struct runtime_config *rtc)
 		client_s = accept(rtc->server_s, (struct sockaddr *)&client_addr, &addr_len);
 
 		if (client_s < 0)
-			syslog(LOG_WARNING, "unable to create socket");
+			continue;
 		else {
 			ids = client_s;
 			if (pthread_create(&threads, &attr, response_thread, &ids)) {
