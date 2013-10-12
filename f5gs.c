@@ -44,10 +44,14 @@ static const char *state_messages[] = {
 	[STATE_ENABLE] = "enable"
 };
 
-socklen_t server_s;
-pthread_rwlock_t lock;
-static int msg_type;
-static size_t msg_len;
+struct runtime_config {
+	struct sockaddr_in server_addr;
+	socklen_t server_s;
+	pthread_rwlock_t lock;
+	int msg_type;
+	size_t msg_len;
+};
+static struct runtime_config rtc;
 
 static void __attribute__((__noreturn__))
 usage(FILE *out)
@@ -78,12 +82,12 @@ static void *response_thread(void *arg)
 	ssize_t retcode;
 	int client_s = (*(int *)arg);
 
-	if (pthread_rwlock_rdlock(&lock)) {
+	if (pthread_rwlock_rdlock(&(rtc.lock))) {
 		warn("could not get lock");
 		return NULL;
 	}
-	send(client_s, state_messages[msg_type], msg_len, 0);
-	pthread_rwlock_unlock(&lock);
+	send(client_s, state_messages[rtc.msg_type], rtc.msg_len, 0);
+	pthread_rwlock_unlock(&(rtc.lock));
 	/* let the client send, and ignore */
 	retcode = recv(client_s, in_buf, IGNORE_BYTES, 0);
 	if (retcode < 0)
@@ -96,26 +100,26 @@ static void *response_thread(void *arg)
 
 static void catch_signals(int signal)
 {
-	if (pthread_rwlock_wrlock(&lock)) {
+	if (pthread_rwlock_wrlock(&rtc.lock)) {
 		warn("could not get lock");
 		return;
 	}
 	switch (signal) {
 	case SIGUSR1:
-		msg_type = STATE_DISABLE;
+		rtc.msg_type = STATE_DISABLE;
 		break;
 	case SIGUSR2:
-		msg_type = STATE_MAINTENANCE;
+		rtc.msg_type = STATE_MAINTENANCE;
 		break;
 	case SIGWINCH:
-		msg_type = STATE_ENABLE;
+		rtc.msg_type = STATE_ENABLE;
 		break;
 	default:
 		/* should be impossible to reach */
 		abort();
 	}
-	msg_len = strlen(state_messages[msg_type]);
-	pthread_rwlock_unlock(&lock);
+	rtc.msg_len = strlen(state_messages[rtc.msg_type]);
+	pthread_rwlock_unlock(&(rtc.lock));
 }
 
 static void __attribute__((__noreturn__))
@@ -151,37 +155,33 @@ static void daemonize(void)
 
 void stop_server(int sig __attribute__((__unused__)))
 {
-	pthread_rwlock_destroy(&lock);
-	close(server_s);
+	pthread_rwlock_destroy(&(rtc.lock));
+	close(rtc.server_s);
 	syslog(LOG_INFO, "stopped");
 	closelog();
 }
 
-static void run_server(void)
+static void run_server(struct runtime_config *rtc)
 {
-	struct sockaddr_in server_addr;
 	struct sockaddr_in client_addr;
 	socklen_t addr_len;
 	unsigned int ids;
 	pthread_attr_t attr;
 	pthread_t threads;
 
-	if (!(server_s = socket(AF_INET, SOCK_STREAM, 0)))
+	if (!(rtc->server_s = socket(AF_INET, SOCK_STREAM, 0)))
 		err(EXIT_FAILURE, "cannot create socket");
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(PORT_NUM);
-	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	if (bind(server_s, (struct sockaddr *)&server_addr, sizeof(server_addr)))
+	if (bind(rtc->server_s, (struct sockaddr *)&(rtc->server_addr), sizeof(rtc->server_addr)))
 		err(EXIT_FAILURE, "unable to bind");
-	if (listen(server_s, PEND_CONNECTIONS))
+	if (listen(rtc->server_s, PEND_CONNECTIONS))
 		err(EXIT_FAILURE, "unable to listen");
 	if (pthread_attr_init(&attr))
 		err(EXIT_FAILURE, "cannot init thread attribute");
 
-	if (pthread_rwlock_init(&lock, NULL))
+	if (pthread_rwlock_init(&(rtc->lock), NULL))
 		err(EXIT_FAILURE, "cannot init read-write lock");
-	msg_type = STATE_UNKNOWN;
-	msg_len = strlen(state_messages[STATE_UNKNOWN]);
+	rtc->msg_type = STATE_UNKNOWN;
+	rtc->msg_len = strlen(state_messages[STATE_UNKNOWN]);
 
 	if (signal(SIGUSR1, catch_signals) == SIG_ERR ||
 	    signal(SIGUSR2, catch_signals) == SIG_ERR ||
@@ -198,7 +198,7 @@ static void run_server(void)
 	while (1) {
 		int client_s;
 		addr_len = sizeof(client_addr);
-		client_s = accept(server_s, (struct sockaddr *)&client_addr, &addr_len);
+		client_s = accept(rtc->server_s, (struct sockaddr *)&client_addr, &addr_len);
 
 		if (client_s < 0)
 			syslog(LOG_WARNING, "unable to create socket");
@@ -235,6 +235,7 @@ int main(int argc, char **argv)
 
 	set_program_name(argv[0]);
 	atexit(close_stdout);
+	memset(&rtc, 0, sizeof(struct runtime_config));
 
 	while ((c = getopt_long(argc, argv, "dmesl:p:Vh", longopts, NULL)) != -1) {
 		switch (c) {
@@ -269,8 +270,15 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (server)
-		run_server();
+	if (server) {
+		rtc.server_addr.sin_family = AF_INET;
+		if (!rtc.server_addr.sin_port)
+			rtc.server_addr.sin_port = htons(PORT_NUM);
+		if (!rtc.server_addr.sin_addr.s_addr)
+			rtc.server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+		run_server(&rtc);
+	}
 
 	return EXIT_SUCCESS;
 }
