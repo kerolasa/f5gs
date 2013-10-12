@@ -153,7 +153,7 @@ static void run_server(void)
 		else {
 			ids = client_s;
 			pthread_create(&threads, &attr, response_thread, &ids);
-
+			pthread_join(threads, NULL);
 		}
 	}
 
