@@ -83,23 +83,25 @@ static void *response_thread(void *arg)
 	return 0;
 }
 
-static void catch_disable(int signal __attribute__ ((__unused__)))
+static void catch_signals(int signal)
 {
-	msg_type = STATE_DISABLE;
-	msg_len = strlen(state_messages[STATE_UNKNOWN]);
+	switch (signal) {
+	case SIGUSR1:
+		msg_type = STATE_DISABLE;
+		break;
+	case SIGUSR2:
+		msg_type = STATE_MAINTENANCE;
+		break;
+	case SIGWINCH:
+		msg_type = STATE_ENABLE;
+		break;
+	default:
+		/* should be impossible to reach */
+		abort();
+	}
+	msg_len = strlen(state_messages[msg_type]);
 }
 
-static void catch_maintenance(int signal __attribute__ ((__unused__)))
-{
-	msg_type = STATE_MAINTENANCE;
-	msg_len = strlen(state_messages[STATE_UNKNOWN]);
-}
-
-static void catch_enable(int signal __attribute__ ((__unused__)))
-{
-	msg_type = STATE_ENABLE;
-	msg_len = strlen(state_messages[STATE_UNKNOWN]);
-}
 
 static void run_server(void)
 {
@@ -114,9 +116,9 @@ static void run_server(void)
 	msg_type = STATE_UNKNOWN;
 	msg_len = strlen(state_messages[STATE_UNKNOWN]);
 
-	if (signal(SIGUSR1, catch_disable) == SIG_ERR ||
-	    signal(SIGUSR2, catch_maintenance) == SIG_ERR ||
-	    signal(SIGWINCH, catch_enable) == SIG_ERR)
+	if (signal(SIGUSR1, catch_signals) == SIG_ERR ||
+	    signal(SIGUSR2, catch_signals) == SIG_ERR ||
+	    signal(SIGWINCH, catch_signals) == SIG_ERR)
 		err(EXIT_FAILURE, "cannot set signal handler");
 
 	if (!(server_s = socket(AF_INET, SOCK_STREAM, 0)))
