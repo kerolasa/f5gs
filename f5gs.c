@@ -34,16 +34,21 @@
 #define IGNORE_BYTES	      256
 
 enum {
-	STATE_UNKNOWN,
 	STATE_DISABLE,
 	STATE_MAINTENANCE,
-	STATE_ENABLE
+	STATE_ENABLE,
+	STATE_UNKNOWN
 };
 static const char *state_messages[] = {
-	[STATE_UNKNOWN] = "unknown",
 	[STATE_DISABLE] = "disable",
 	[STATE_MAINTENANCE] = "maintenance",
-	[STATE_ENABLE] = "enable"
+	[STATE_ENABLE] = "enable",
+	[STATE_UNKNOWN] = "unknown"
+};
+static const int state_signals[] = {
+	[STATE_DISABLE] = SIGUSR1,
+	[STATE_MAINTENANCE] = SIGUSR2,
+	[STATE_ENABLE] = SIGWINCH
 };
 
 struct runtime_config {
@@ -182,13 +187,6 @@ static void run_server(struct runtime_config *rtc)
 
 	if (pthread_rwlock_init(&(rtc->lock), NULL))
 		err(EXIT_FAILURE, "cannot init read-write lock");
-	rtc->msg_type = STATE_UNKNOWN;
-	rtc->msg_len = strlen(state_messages[STATE_UNKNOWN]);
-
-	if (signal(SIGUSR1, catch_signals) == SIG_ERR ||
-	    signal(SIGUSR2, catch_signals) == SIG_ERR ||
-	    signal(SIGWINCH, catch_signals) == SIG_ERR)
-		err(EXIT_FAILURE, "cannot set signal handler");
 
 	daemonize();
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
@@ -217,7 +215,7 @@ static void run_server(struct runtime_config *rtc)
 
 int main(int argc, char **argv)
 {
-	int c, server = 0;
+	int c, server = 0, send_signal = 0;
 	char *listen = NULL, *port = PORT_NUM;
 	struct addrinfo hints;
 	int e;
@@ -244,13 +242,13 @@ int main(int argc, char **argv)
 	while ((c = getopt_long(argc, argv, "dmesl:p:Vh", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
-			printf("FIXME: disable");
+			send_signal = state_signals[STATE_DISABLE];
 			break;
 		case 'm':
-			printf("FIXME: maintenance");
+			send_signal = state_signals[STATE_MAINTENANCE];
 			break;
 		case 'e':
-			printf("FIXME: enable");
+			send_signal = state_signals[STATE_ENABLE];
 			break;
 		case 's':
 			server = 1;
@@ -274,9 +272,13 @@ int main(int argc, char **argv)
 		}
 	}
 
+	if (signal(state_signals[STATE_DISABLE], catch_signals) == SIG_ERR ||
+	    signal(state_signals[STATE_MAINTENANCE], catch_signals) == SIG_ERR ||
+	    signal(state_signals[STATE_ENABLE], catch_signals) == SIG_ERR)
+		err(EXIT_FAILURE, "cannot set signal handler");
+
 	memset(&rtc, 0, sizeof(struct runtime_config));
 	memset(&hints, 0, sizeof(struct addrinfo));
-
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
@@ -285,6 +287,14 @@ int main(int argc, char **argv)
 		warnx("getaddrinfo: %s port %s: %s", listen, port, gai_strerror(e));
 		exit(EXIT_FAILURE);
 	}
+
+	if (send_signal && server)
+		kill(getpid(), send_signal);
+	else if (server) {
+		rtc.msg_type = STATE_UNKNOWN;
+		rtc.msg_len = strlen(state_messages[STATE_UNKNOWN]);
+	}
+
 	if (server)
 		run_server(&rtc);
 
