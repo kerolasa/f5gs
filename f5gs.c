@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <limits.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <semaphore.h>
@@ -20,6 +21,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <syslog.h>
 #include <unistd.h>
 
@@ -27,7 +29,7 @@
 #include "closeout.h"
 #include "progname.h"
 
-#define PORT_NUM	    32546	/* f5 == in octal */
+#define PORT_NUM	    "32546"	/* f5 == in octal */
 #define PEND_CONNECTIONS      128	/* pending connections to hold */
 #define IGNORE_BYTES	      256
 
@@ -45,8 +47,8 @@ static const char *state_messages[] = {
 };
 
 struct runtime_config {
-	struct sockaddr_in server_addr;
-	socklen_t server_s;
+	struct addrinfo *res;
+	int server_s;
 	pthread_rwlock_t lock;
 	int msg_type;
 	size_t msg_len;
@@ -65,7 +67,7 @@ usage(FILE *out)
 	fputs("\n", out);
 	fputs(" -s, --server         start up health check daemon\n", out);
 	fputs(" -l, --listen <addr>  ip address deamon will listen\n", out);
-	fprintf(out, " -p, --port <port>    health check tcp port (default: %d)\n", PORT_NUM);
+	fprintf(out, " -p, --port <port>    health check tcp port (default: %s)\n", PORT_NUM);
 	fprintf(out, "     --state <dir>    path of the state dir (default: %s)\n", F5GS_RUNDIR);
 	fputs("\n", out);
 	fputs(" -h, --help           display this help and exit\n", out);
@@ -169,9 +171,9 @@ static void run_server(struct runtime_config *rtc)
 	pthread_attr_t attr;
 	pthread_t threads;
 
-	if (!(rtc->server_s = socket(AF_INET, SOCK_STREAM, 0)))
+	if (!(rtc->server_s = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
 		err(EXIT_FAILURE, "cannot create socket");
-	if (bind(rtc->server_s, (struct sockaddr *)&(rtc->server_addr), sizeof(rtc->server_addr)))
+	if (bind(rtc->server_s, rtc->res->ai_addr, rtc->res->ai_addrlen))
 		err(EXIT_FAILURE, "unable to bind");
 	if (listen(rtc->server_s, PEND_CONNECTIONS))
 		err(EXIT_FAILURE, "unable to listen");
@@ -216,6 +218,9 @@ static void run_server(struct runtime_config *rtc)
 int main(int argc, char **argv)
 {
 	int c, server = 0;
+	char *listen = NULL, *port = PORT_NUM;
+	struct addrinfo hints;
+	int e;
 	enum {
 		STATEDIR_OPT = CHAR_MAX + 1,
 	};
@@ -235,7 +240,6 @@ int main(int argc, char **argv)
 
 	set_program_name(argv[0]);
 	atexit(close_stdout);
-	memset(&rtc, 0, sizeof(struct runtime_config));
 
 	while ((c = getopt_long(argc, argv, "dmesl:p:Vh", longopts, NULL)) != -1) {
 		switch (c) {
@@ -252,10 +256,10 @@ int main(int argc, char **argv)
 			server = 1;
 			break;
 		case 'l':
-			printf("FIXME: listen");
+			listen = optarg;
 			break;
 		case 'p':
-			printf("FIXME: port");
+			port = optarg;
 			break;
 		case STATEDIR_OPT:
 			printf("FIXME: state file");
@@ -270,15 +274,19 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (server) {
-		rtc.server_addr.sin_family = AF_INET;
-		if (!rtc.server_addr.sin_port)
-			rtc.server_addr.sin_port = htons(PORT_NUM);
-		if (!rtc.server_addr.sin_addr.s_addr)
-			rtc.server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	memset(&rtc, 0, sizeof(struct runtime_config));
+	memset(&hints, 0, sizeof(struct addrinfo));
 
-		run_server(&rtc);
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+	e = getaddrinfo(listen, port, &hints, &(rtc.res));
+	if (e) {
+		warnx("getaddrinfo: %s port %s: %s", listen, port, gai_strerror(e));
+		exit(EXIT_FAILURE);
 	}
+	if (server)
+		run_server(&rtc);
 
 	return EXIT_SUCCESS;
 }
