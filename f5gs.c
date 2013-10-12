@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <err.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <netinet/in.h>
 #include <pthread.h>
@@ -17,6 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #include "close-stream.h"
@@ -40,6 +43,7 @@ static const char *state_messages[] = {
 	[STATE_ENABLE] = "enable"
 };
 
+socklen_t server_s;
 pthread_rwlock_t lock;
 static int msg_type;
 static size_t msg_len;
@@ -113,24 +117,53 @@ static void catch_signals(int signal)
 	pthread_rwlock_unlock(&lock);
 }
 
+static void __attribute__((__noreturn__))
+faillog(char *msg)
+{
+	syslog(LOG_ERR, "%s: %s", msg, strerror(errno));
+	exit(EXIT_FAILURE);
+}
+
+static void daemonize(void)
+{
+	int fd;
+
+	switch (fork()) {
+	case -1:
+		err(EXIT_FAILURE, "cannot fork");
+	case 0:
+		break;
+	default:
+		_exit(EXIT_SUCCESS);
+	}
+	if (!setsid())
+		err(EXIT_FAILURE, "cannot setsid");
+	chdir("/");
+	if ((fd = open("/dev/null", O_RDWR, 0)) != -1) {
+		dup2(fd, STDIN_FILENO);
+		dup2(fd, STDOUT_FILENO);
+		dup2(fd, STDERR_FILENO);
+		if (fd > STDERR_FILENO)
+			close(fd);
+	}
+}
+
+void stop_server(int sig __attribute__((__unused__)))
+{
+	pthread_rwlock_destroy(&lock);
+	close(server_s);
+	syslog(LOG_INFO, "stopped");
+	closelog();
+}
+
 static void run_server(void)
 {
-	socklen_t server_s;
 	struct sockaddr_in server_addr;
 	struct sockaddr_in client_addr;
 	socklen_t addr_len;
 	unsigned int ids;
 	pthread_attr_t attr;
 	pthread_t threads;
-
-	pthread_rwlock_init(&lock, NULL);
-	msg_type = STATE_UNKNOWN;
-	msg_len = strlen(state_messages[STATE_UNKNOWN]);
-
-	if (signal(SIGUSR1, catch_signals) == SIG_ERR ||
-	    signal(SIGUSR2, catch_signals) == SIG_ERR ||
-	    signal(SIGWINCH, catch_signals) == SIG_ERR)
-		err(EXIT_FAILURE, "cannot set signal handler");
 
 	if (!(server_s = socket(AF_INET, SOCK_STREAM, 0)))
 		err(EXIT_FAILURE, "cannot create socket");
@@ -141,24 +174,42 @@ static void run_server(void)
 		err(EXIT_FAILURE, "unable to bind");
 	if (listen(server_s, PEND_CONNECTIONS))
 		err(EXIT_FAILURE, "unable to listen");
+	if (pthread_attr_init(&attr))
+		err(EXIT_FAILURE, "cannot init thread attribute");
 
-	pthread_attr_init(&attr);
+	if (pthread_rwlock_init(&lock, NULL))
+		err(EXIT_FAILURE, "cannot init read-write lock");
+	msg_type = STATE_UNKNOWN;
+	msg_len = strlen(state_messages[STATE_UNKNOWN]);
+
+	if (signal(SIGUSR1, catch_signals) == SIG_ERR ||
+	    signal(SIGUSR2, catch_signals) == SIG_ERR ||
+	    signal(SIGWINCH, catch_signals) == SIG_ERR)
+		err(EXIT_FAILURE, "cannot set signal handler");
+
+	daemonize();
+	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
+	signal(SIGHUP, stop_server);
+	signal(SIGINT, stop_server);
+	signal(SIGTERM, stop_server);
+	syslog(LOG_INFO, "started");
+
 	while (1) {
 		int client_s;
 		addr_len = sizeof(client_addr);
 		client_s = accept(server_s, (struct sockaddr *)&client_addr, &addr_len);
 
 		if (client_s < 0)
-			err(EXIT_FAILURE, "unable to create socket");
+			syslog(LOG_WARNING, "unable to create socket");
 		else {
 			ids = client_s;
-			pthread_create(&threads, &attr, response_thread, &ids);
+			if (pthread_create(&threads, &attr, response_thread, &ids)) {
+				syslog(LOG_ERR, "thread creation failed");
+				continue;
+			}
 			pthread_join(threads, NULL);
 		}
 	}
-
-	pthread_rwlock_destroy(&lock);
-	close(server_s);
 }
 
 int main(int argc, char **argv)
