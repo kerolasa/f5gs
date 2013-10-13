@@ -354,7 +354,9 @@ static void run_server(struct runtime_config *rtc)
 		err(EXIT_FAILURE, "cannot init read-write lock");
 
 	daemonize();
-	if (rtc->msg_type == STATE_UNKNOWN && read_status_from_file(rtc) && update_pid_file(rtc))
+	if (rtc->msg_type == STATE_UNKNOWN)
+		read_status_from_file(rtc);
+	if (update_pid_file(rtc))
 		faillog("cannot write pid file");
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 	signal(SIGHUP, stop_server);
