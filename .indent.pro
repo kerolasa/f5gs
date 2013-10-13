@@ -1,0 +1,10 @@
+-linux
+-TFILE
+-Toff_t
+-Tpthread_cond_t
+-Tpthread_mutex_t
+-Tsize_t
+-Ttime_t
+-Tuintmax_t
+--preprocessor-indentation1
+-l120

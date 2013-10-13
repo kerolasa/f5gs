@@ -104,7 +104,7 @@ struct request {
 static struct request *requests = NULL;
 static struct request *last_request = NULL;
 
-static void __attribute__((__noreturn__))
+static void __attribute__ ((__noreturn__))
     usage(FILE *out)
 {
 	fputs("\nUsage:\n", out);
@@ -126,7 +126,7 @@ static void __attribute__((__noreturn__))
 	exit(out == stderr ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
-static void __attribute__((__noreturn__))
+static void __attribute__ ((__noreturn__))
     faillog(char *msg)
 {
 	syslog(LOG_ERR, "%s: %s", msg, strerror(errno));
@@ -167,7 +167,7 @@ void handle_request(struct request *req)
 	close(req->client_s);
 }
 
-static void *response_thread(void *arg __attribute__((__unused__)))
+static void *response_thread(void *arg __attribute__ ((__unused__)))
 {
 	struct request *req;
 
@@ -203,7 +203,8 @@ static char *construct_pidfile(struct runtime_config *rtc)
 		break;
 	}
 	inet_ntop(rtc->res->ai_family, p, s, sizeof(s));
-	ret = asprintf(&path, "%s/%s:%d", rtc->statedir, s, ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
+	ret = asprintf(&path, "%s/%s:%d", rtc->statedir, s,
+		       ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
 	if (ret < 0)
 		faillog("cannot allocate memory");
 	return path;
@@ -301,7 +302,7 @@ static void daemonize(void)
 	}
 }
 
-void stop_server(int sig __attribute__((__unused__)))
+void stop_server(int sig __attribute__ ((__unused__)))
 {
 	pthread_rwlock_destroy(&(rtc.lock));
 	close(rtc.server_s);
