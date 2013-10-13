@@ -1,0 +1,124 @@
+.\"
+.\" Please read 'man 7 groff_man' howto use various macros.
+.TH F5GS "8" "2013-10-13" "f5gs" "System Administration"
+.SH NAME
+f5gs \- F5 graceful scaling helper daemon
+.SH SYNOPSIS
+.B f5gs
+[options]
+.SH DESCRIPTION
+This daemon is intended to be used as an additional loadbalancer health
+check.  The loadbalancer has to have a away to add a health check in
+alternative port in order to use this too.  For example recent versions
+of F5 provide such functionality.  Health check answer from this command
+will be standalone in comparison to service that the health check is
+related to.  Idea is simply to provide easy to control daemon when
+indicating the service state with content of the backend service is
+difficult.
+.PP
+This daemon will listen a TCP port
+.BR 32546 .
+All connections to that port will be replied with one of the following
+responses:
+.IR disable ,
+.IR maintenance ,
+.IR enable ,
+or
+.IR unknown .
+The response is set by sending a signal to the
+.B f5gs
+deamon, or using the command to send signal, see options for details.
+Run state is wrote to a file, where it is retrieved at daemon start up.
+First number in run state file is pid of the daemon.  Run states are
+wrote to a directory that can contain multiple files.  The files are
+identified by listen address and tcp port.  This allows having several
+.B f5gs
+instances running in same server.
+.PP
+The
+.I unknown
+cannot be set.  It stands for health check state that is never set.  From
+F5 point of view
+.I unknown
+and
+.I disable
+states are the same.
+.PP
+The daemon will ignore 256 bytes of input.  Any excess input does not get
+read, and will result to a socket error at the other end of the
+connection.  The best idea is to use internal identifier, such as F5 host
+name, as health check input that will enable easy debugging with tcpdump.
+.SH OPTIONS
+.TP
+\fB\-d\fR, \fB\-\-disable\fR
+Disable the health check.  This will stop new connections to arrive, and
+shut old connections immediately.  Same can be achieved by sending
+SIGUSR1 to the daemon.
+.TP
+\fB\-m\fR, \fB\-\-maintenance\fR
+Use health check to quiesce connections.  This will stop new connections
+to arrive, while the existing connections are served.  Same can be
+achieved by sending SIGUSR2 to the daemon.
+.TP
+\fB\-e\fR, \fB\-\-enable\fR
+Enable health check.  This will set the service to normal operational state,
+Same can be achieved by sending SIGWINCH to the daemon.
+.TP
+\fB\-s\fR, \fB\-\-server\fR
+Start the health check daemon.  The daemon tries to find old service
+state file, and set the initial state to what is used to be.  If any of
+the state change options is used with \-\-service option the option will
+override contents of the old state file.
+.TP
+\fB\-l\fR, \fB\-\-listen\fR \fIaddress\fR
+Bind the server to
+.IR address .
+When the
+.I address
+is defined without \-\-server option status will be requested from that
+.IR address .
+Address can be IP or a DNS name.  The default address is 0.\:0.\:0.\:0,
+that binds the server to all interface.
+.TP
+\fB\-p\fR, \fB\-\-port\fR \fIport\fR
+TCP
+.I port
+of the server.  Default port is
+.IR 32546 .
+.TP
+\fB\-\-state\fR \fIdirectory\fR
+Relocate the command
+.I state directory
+to elsewhere from
+.IR /var\:/run\:/f5gs/ .
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Display version information and exit.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Display help and exit.
+.SH EXAMPLE
+f5gs --server
+.br
+f5gs --enable
+.br
+echo hello | nc localhost 32546 ; echo
+.SH LICENSE
+The f5gs has BSD 2-clause license which also known as "Simplified BSD
+License" or "FreeBSD License".
+.SH FILES
+.TP
+.B /var\:/run\:/f5gs/
+Location of the state files.
+.SH AUTHORS
+.MT kerolasa@iki.fi
+Sami Kerola
+.ME
+.SH "SEE ALSO"
+.UR https://\:devcentral.f5.com\:/articles\:/f5-friday-gracefully-scaling-down
+F5 Friday: Gracefully Scaling Down
+.UE .
+.SH AVAILABILITY
+.UR https://\:github.com\:/kerolasa\:/f5gs
+Github
+.UE .

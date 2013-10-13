@@ -11,3 +11,4 @@ SUBDIRS = lib
 bin_PROGRAMS = f5gs
 f5gs_SOURCES = f5gs.c
 f5gs_LDADD = $(top_builddir)/lib/libf5gs.la $(LIB_PTHREAD)
+man_MANS = f5gs.8
