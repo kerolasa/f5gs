@@ -1,6 +1,37 @@
 /* This is F5 Graceful Scaling helper daemon.
  *
- * Sami Kerola <sami.kerola@sabre.com>
+ * The f5gs has BSD 2-clause license which also known as "Simplified
+ * BSD License" or "FreeBSD License".
+ *
+ * Copyright 2013- Sami Kerola. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *    1. Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *
+ *    2. Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the
+ *       distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR AND CONTRIBUTORS OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation are
+ * those of the authors and should not be interpreted as representing
+ * official policies, either expressed or implied, of Sami Kerola.
  */
 
 #include "config.h"
@@ -29,7 +60,6 @@
 #include "closeout.h"
 #include "progname.h"
 
-#define PEND_CONNECTIONS      128	/* pending connections to hold */
 #define IGNORE_BYTES	      256
 
 enum {
@@ -38,12 +68,15 @@ enum {
 	STATE_ENABLE,
 	STATE_UNKNOWN
 };
+
+/* Check get_server_status() is valid after changing message text(s). */
 static const char *state_messages[] = {
 	[STATE_DISABLE] = "disable",
 	[STATE_MAINTENANCE] = "maintenance",
 	[STATE_ENABLE] = "enable",
 	[STATE_UNKNOWN] = "unknown"
 };
+
 static const int state_signals[] = {
 	[STATE_DISABLE] = SIGUSR1,
 	[STATE_MAINTENANCE] = SIGUSR2,
@@ -61,7 +94,7 @@ struct runtime_config {
 static struct runtime_config rtc;
 
 static void __attribute__((__noreturn__))
-usage(FILE *out)
+    usage(FILE *out)
 {
 	fputs("\nUsage:\n", out);
 	fprintf(out, " %s [options]\n", program_invocation_short_name);
@@ -82,23 +115,26 @@ usage(FILE *out)
 	exit(out == stderr ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
-/* child thread */
+static void __attribute__((__noreturn__))
+    faillog(char *msg)
+{
+	syslog(LOG_ERR, "%s: %s", msg, strerror(errno));
+	exit(EXIT_FAILURE);
+}
+
 static void *response_thread(void *arg)
 {
 	char in_buf[IGNORE_BYTES];
-	ssize_t retcode;
 	int client_s = (*(int *)arg);
 
 	if (pthread_rwlock_rdlock(&(rtc.lock))) {
-		warn("could not get lock");
+		syslog(LOG_ERR, "could not get lock");
 		return NULL;
 	}
 	send(client_s, state_messages[rtc.msg_type], rtc.msg_len, 0);
 	pthread_rwlock_unlock(&(rtc.lock));
 	/* let the client send, and ignore */
-	retcode = recv(client_s, in_buf, IGNORE_BYTES, 0);
-	if (retcode < 0)
-		printf("recv error\n");
+	recv(client_s, in_buf, IGNORE_BYTES, 0);
 	close(client_s);
 	pthread_exit(NULL);
 	/* should be impossible to reach */
@@ -110,6 +146,7 @@ static char *construct_pidfile(struct runtime_config *rtc)
 	char *path;
 	void *p;
 	char s[INET6_ADDRSTRLEN];
+	int ret;
 
 	inet_ntop(rtc->res->ai_family, rtc->res->ai_addr->sa_data, s, sizeof(s));
 	switch (rtc->res->ai_family) {
@@ -121,7 +158,9 @@ static char *construct_pidfile(struct runtime_config *rtc)
 		break;
 	}
 	inet_ntop(rtc->res->ai_family, p, s, sizeof(s));
-	asprintf(&path, "%s/%s:%d", rtc->statedir, s, ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
+	ret = asprintf(&path, "%s/%s:%d", rtc->statedir, s, ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
+	if (ret < 0)
+		faillog("cannot allocate memory");
 	return path;
 }
 
@@ -134,8 +173,10 @@ static int update_pid_file(struct runtime_config *rtc)
 		if (mkdir(rtc->statedir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH))
 			return 1;
 	pidfile = construct_pidfile(rtc);
-	if (!(fd = fopen(pidfile, "w")))
+	if (!(fd = fopen(pidfile, "w"))) {
+		syslog(LOG_ERR, "could not open file: %s: %s", pidfile, strerror(errno));
 		return 1;
+	}
 	fprintf(fd, "%u %d", getpid(), rtc->msg_type);
 	fclose(fd);
 	free(pidfile);
@@ -145,7 +186,7 @@ static int update_pid_file(struct runtime_config *rtc)
 static void catch_signals(int signal)
 {
 	if (pthread_rwlock_wrlock(&rtc.lock)) {
-		warn("could not get lock");
+		syslog(LOG_ERR, "could not get lock");
 		return;
 	}
 	switch (signal) {
@@ -165,13 +206,6 @@ static void catch_signals(int signal)
 	rtc.msg_len = strlen(state_messages[rtc.msg_type]);
 	pthread_rwlock_unlock(&(rtc.lock));
 	update_pid_file(&rtc);
-}
-
-static void __attribute__((__noreturn__))
-faillog(char *msg)
-{
-	syslog(LOG_ERR, "%s: %s", msg, strerror(errno));
-	exit(EXIT_FAILURE);
 }
 
 static int read_status_from_file(struct runtime_config *rtc)
@@ -242,7 +276,7 @@ static void run_server(struct runtime_config *rtc)
 		err(EXIT_FAILURE, "cannot create socket");
 	if (bind(rtc->server_s, rtc->res->ai_addr, rtc->res->ai_addrlen))
 		err(EXIT_FAILURE, "unable to bind");
-	if (listen(rtc->server_s, PEND_CONNECTIONS))
+	if (listen(rtc->server_s, SOMAXCONN))
 		err(EXIT_FAILURE, "unable to listen");
 	if (pthread_attr_init(&attr))
 		err(EXIT_FAILURE, "cannot init thread attribute");
@@ -296,7 +330,7 @@ int main(int argc, char **argv)
 	struct addrinfo hints;
 	int e;
 	enum {
-		STATEDIR_OPT = CHAR_MAX + 1,
+		STATEDIR_OPT = CHAR_MAX + 1
 	};
 
 	static const struct option longopts[] = {
@@ -343,7 +377,7 @@ int main(int argc, char **argv)
 			break;
 		case 'V':
 			printf("%s version %s\n", PACKAGE_NAME, PACKAGE_VERSION);
-			break;
+			return EXIT_SUCCESS;
 		case 'h':
 			usage(stdout);
 		default:

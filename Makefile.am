@@ -10,7 +10,11 @@ SUBDIRS = lib
 
 bin_PROGRAMS = f5gs
 f5gs_SOURCES = f5gs.c
-f5gs_LDADD = $(top_builddir)/lib/libf5gs.la $(LIB_PTHREAD)
+f5gs_LDADD = \
+	$(top_builddir)/lib/lib$(PACKAGE).la \
+	$(LIBSOCKET) \
+	$(LIB_PTHREAD) \
+	$(LTLIBINTL)
 
 edit = sed \
 	-e 's|@PACKAGE_BUGREPORT[@]|$(PACKAGE_BUGREPORT)|g' \
