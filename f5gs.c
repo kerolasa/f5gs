@@ -253,6 +253,18 @@ static void run_server(struct runtime_config *rtc)
 	}
 }
 
+char *get_server_status(struct runtime_config *rtc)
+{
+	int sfd;
+	static char buf[12] = { 0 };	/* 'maintenance' is the longest reply. */
+	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
+		err(EXIT_FAILURE, "cannot create socket");
+	if (connect(sfd, rtc->res->ai_addr, rtc->res->ai_addrlen))
+		err(EXIT_FAILURE, "cannot connect");
+	read(sfd, buf, 12);
+	return buf;
+}
+
 int main(int argc, char **argv)
 {
 	int c, server = 0, send_signal = 0;
@@ -350,6 +362,8 @@ int main(int argc, char **argv)
 
 	if (server)
 		run_server(&rtc);
+
+	printf("current status is: %s\n", get_server_status(&rtc));
 
 	freeaddrinfo(rtc.res);
 
