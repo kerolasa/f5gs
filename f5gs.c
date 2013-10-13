@@ -60,6 +60,7 @@
 #include "closeout.h"
 #include "progname.h"
 
+#define NUM_WORKERS		3
 #define IGNORE_BYTES	      256
 
 enum {
@@ -91,7 +92,17 @@ struct runtime_config {
 	size_t msg_len;
 	char *statedir;
 };
+
 static struct runtime_config rtc;
+static pthread_mutex_t request_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+static pthread_cond_t new_request = PTHREAD_COND_INITIALIZER;
+static unsigned int num_requests;
+struct request {
+	int client_s;
+	struct request *next;
+};
+static struct request *requests = NULL;
+static struct request *last_request = NULL;
 
 static void __attribute__((__noreturn__))
     usage(FILE *out)
@@ -122,22 +133,56 @@ static void __attribute__((__noreturn__))
 	exit(EXIT_FAILURE);
 }
 
-static void *response_thread(void *arg)
+struct request *get_request(pthread_mutex_t *p_mutex)
+{
+	struct request *req;
+
+	pthread_mutex_lock(p_mutex);
+	if (0 < num_requests) {
+		req = requests;
+		requests = req->next;
+		/* was this last? */
+		if (requests == NULL)
+			last_request = NULL;
+		num_requests--;
+	} else {
+		req = NULL;
+	}
+	pthread_mutex_unlock(p_mutex);
+	return req;
+}
+
+void handle_request(struct request *req)
 {
 	char in_buf[IGNORE_BYTES];
-	int client_s = (*(int *)arg);
 
 	if (pthread_rwlock_rdlock(&(rtc.lock))) {
-		syslog(LOG_ERR, "could not get lock");
-		return NULL;
+		syslog(LOG_ERR, "could not get lock, connection will fail");
+		return;
 	}
-	send(client_s, state_messages[rtc.msg_type], rtc.msg_len, 0);
+	send(req->client_s, state_messages[rtc.msg_type], rtc.msg_len, 0);
 	pthread_rwlock_unlock(&(rtc.lock));
 	/* let the client send, and ignore */
-	recv(client_s, in_buf, IGNORE_BYTES, 0);
-	close(client_s);
-	pthread_exit(NULL);
-	/* should be impossible to reach */
+	recv(req->client_s, in_buf, IGNORE_BYTES, 0);
+	close(req->client_s);
+}
+
+static void *response_thread(void *arg __attribute__((__unused__)))
+{
+	struct request *req;
+
+	pthread_mutex_lock(&request_mutex);
+	while (1) {
+		if (0 < num_requests) {
+			req = get_request(&request_mutex);
+			if (req) {
+				handle_request(req);
+				free(req);
+			}
+		} else {
+			pthread_cond_wait(&new_request, &request_mutex);
+		}
+	}
 	return NULL;
 }
 
@@ -264,13 +309,35 @@ void stop_server(int sig __attribute__((__unused__)))
 	closelog();
 }
 
+void add_request(int client_s, pthread_mutex_t *p_mutex, pthread_cond_t *p_cond_var)
+{
+	struct request *added;
+
+	added = malloc(sizeof(struct request));
+	if (!added)
+		faillog("cannot allocate memory");
+	added->client_s = client_s;
+	added->next = NULL;
+
+	pthread_mutex_lock(p_mutex);
+	if (num_requests == 0)
+		requests = added;
+	else
+		last_request->next = added;
+	last_request = added;
+	num_requests++;
+	pthread_mutex_unlock(p_mutex);
+	/* wakeup worker */
+	pthread_cond_signal(p_cond_var);
+}
+
 static void run_server(struct runtime_config *rtc)
 {
 	struct sockaddr_in client_addr;
 	socklen_t addr_len;
-	unsigned int ids;
+	unsigned int ids[NUM_WORKERS], i;
 	pthread_attr_t attr;
-	pthread_t threads;
+	pthread_t threads[NUM_WORKERS];
 
 	if (!(rtc->server_s = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
 		err(EXIT_FAILURE, "cannot create socket");
@@ -293,6 +360,11 @@ static void run_server(struct runtime_config *rtc)
 	signal(SIGTERM, stop_server);
 	syslog(LOG_INFO, "started");
 
+	for (i = 0; i < NUM_WORKERS; i++) {
+		ids[i] = i;
+		pthread_create(&threads[i], NULL, response_thread, (void *)&ids[i]);
+	}
+
 	while (1) {
 		int client_s;
 		addr_len = sizeof(client_addr);
@@ -300,14 +372,8 @@ static void run_server(struct runtime_config *rtc)
 
 		if (client_s < 0)
 			continue;
-		else {
-			ids = client_s;
-			if (pthread_create(&threads, &attr, response_thread, &ids)) {
-				syslog(LOG_ERR, "thread creation failed");
-				continue;
-			}
-			pthread_join(threads, NULL);
-		}
+		else
+			add_request(client_s, &request_mutex, &new_request);
 	}
 }
 
