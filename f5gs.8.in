@@ -103,6 +103,13 @@ f5gs --server
 f5gs --enable
 .br
 echo hello | nc localhost @PORT_NUM@ ; echo
+.SH BUGS
+Please report to author if you find a bug.
+.PP
+Lack of daemon stop functionality is known quirk, and done on purpose.
+If a host needs this service you will never want to stop the service,
+disabling is as good as stopping.  If you really want stop you should
+kill the process.
 .SH LICENSE
 The f5gs has BSD 2-clause license which also known as "Simplified BSD
 License" or "FreeBSD License".
