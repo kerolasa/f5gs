@@ -57,6 +57,7 @@ struct runtime_config {
 	pthread_rwlock_t lock;
 	int msg_type;
 	size_t msg_len;
+	char *statedir;
 };
 static struct runtime_config rtc;
 
@@ -136,6 +137,46 @@ faillog(char *msg)
 	exit(EXIT_FAILURE);
 }
 
+static char *construct_pidfile(struct runtime_config *rtc)
+{
+	char *path;
+	void *p;
+	char s[INET6_ADDRSTRLEN];
+	struct sockaddr_in port;
+	socklen_t port_len = sizeof(struct sockaddr);
+
+	inet_ntop(rtc->res->ai_family, rtc->res->ai_addr->sa_data, s, sizeof(s));
+	switch (rtc->res->ai_family) {
+	case AF_INET:
+		p = &((struct sockaddr_in *)rtc->res->ai_addr)->sin_addr;
+		break;
+	case AF_INET6:
+		p = &((struct sockaddr_in6 *)rtc->res->ai_addr)->sin6_addr;
+		break;
+	}
+	inet_ntop(rtc->res->ai_family, p, s, sizeof(s));
+	getsockname(rtc->server_s, (struct sockaddr *)&port, &port_len);
+	asprintf(&path, "%s/%s:%d", rtc->statedir, s, ntohs(port.sin_port));
+	return path;
+}
+
+static int update_pid_file(struct runtime_config *rtc)
+{
+	FILE *fd;
+	char *pidfile;
+
+	if (access(rtc->statedir, W_OK))
+		if (mkdir(rtc->statedir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH))
+			return 1;
+	pidfile = construct_pidfile(rtc);
+	if (!(fd = fopen(pidfile, "w")))
+		return 1;
+	fprintf(fd, "%u", getpid());
+	fclose(fd);
+	free(pidfile);
+	return 0;
+}
+
 static void daemonize(void)
 {
 	int fd;
@@ -189,6 +230,8 @@ static void run_server(struct runtime_config *rtc)
 		err(EXIT_FAILURE, "cannot init read-write lock");
 
 	daemonize();
+	if (update_pid_file(rtc))
+		faillog("cannot write pid file");
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 	signal(SIGHUP, stop_server);
 	signal(SIGINT, stop_server);
@@ -239,6 +282,9 @@ int main(int argc, char **argv)
 	set_program_name(argv[0]);
 	atexit(close_stdout);
 
+	memset(&rtc, 0, sizeof(struct runtime_config));
+	rtc.statedir = F5GS_RUNDIR;
+
 	while ((c = getopt_long(argc, argv, "dmesl:p:Vh", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
@@ -260,7 +306,7 @@ int main(int argc, char **argv)
 			port = optarg;
 			break;
 		case STATEDIR_OPT:
-			printf("FIXME: state file");
+			rtc.statedir = optarg;
 			break;
 		case 'V':
 			printf("%s version %s\n", PACKAGE_NAME, PACKAGE_VERSION);
@@ -277,7 +323,6 @@ int main(int argc, char **argv)
 	    signal(state_signals[STATE_ENABLE], catch_signals) == SIG_ERR)
 		err(EXIT_FAILURE, "cannot set signal handler");
 
-	memset(&rtc, 0, sizeof(struct runtime_config));
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
@@ -297,6 +342,8 @@ int main(int argc, char **argv)
 
 	if (server)
 		run_server(&rtc);
+
+	freeaddrinfo(rtc.res);
 
 	return EXIT_SUCCESS;
 }
