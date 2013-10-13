@@ -224,7 +224,8 @@ static int update_pid_file(struct runtime_config *rtc)
 		return 1;
 	}
 	fprintf(fd, "%u %d", getpid(), rtc->msg_type);
-	fclose(fd);
+	if (close_stream(fd))
+		syslog(LOG_ERR, "close failed: %s: %s", pidfile, strerror(errno));
 	free(pidfile);
 	return 0;
 }
@@ -479,7 +480,8 @@ int main(int argc, char **argv)
 		if (!(pidfd = fopen(pid_file, "r")))
 			err(EXIT_FAILURE, "cannot open pid file: %s", pid_file);
 		fscanf(pidfd, "%d", &pid);
-		fclose(pidfd);
+		if (close_stream(pidfd))
+			syslog(LOG_ERR, "close failed: %s: %s", pid_file, strerror(errno));
 		free(pid_file);
 		if (kill(pid, send_signal))
 			err(EXIT_FAILURE, "sending signal failed");
