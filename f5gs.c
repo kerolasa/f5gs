@@ -251,8 +251,8 @@ static void catch_signals(int signal)
 		abort();
 	}
 	rtc.msg_len = strlen(state_messages[rtc.msg_type]);
-	pthread_rwlock_unlock(&(rtc.lock));
 	update_pid_file(&rtc);
+	pthread_rwlock_unlock(&(rtc.lock));
 }
 
 static int read_status_from_file(struct runtime_config *rtc)
