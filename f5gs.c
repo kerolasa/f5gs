@@ -106,37 +106,6 @@ static void *response_thread(void *arg)
 	return NULL;
 }
 
-static void catch_signals(int signal)
-{
-	if (pthread_rwlock_wrlock(&rtc.lock)) {
-		warn("could not get lock");
-		return;
-	}
-	switch (signal) {
-	case SIGUSR1:
-		rtc.msg_type = STATE_DISABLE;
-		break;
-	case SIGUSR2:
-		rtc.msg_type = STATE_MAINTENANCE;
-		break;
-	case SIGWINCH:
-		rtc.msg_type = STATE_ENABLE;
-		break;
-	default:
-		/* should be impossible to reach */
-		abort();
-	}
-	rtc.msg_len = strlen(state_messages[rtc.msg_type]);
-	pthread_rwlock_unlock(&(rtc.lock));
-}
-
-static void __attribute__((__noreturn__))
-faillog(char *msg)
-{
-	syslog(LOG_ERR, "%s: %s", msg, strerror(errno));
-	exit(EXIT_FAILURE);
-}
-
 static char *construct_pidfile(struct runtime_config *rtc)
 {
 	char *path;
@@ -168,10 +137,66 @@ static int update_pid_file(struct runtime_config *rtc)
 	pidfile = construct_pidfile(rtc);
 	if (!(fd = fopen(pidfile, "w")))
 		return 1;
-	fprintf(fd, "%u", getpid());
+	fprintf(fd, "%u %d", getpid(), rtc->msg_type);
 	fclose(fd);
 	free(pidfile);
 	return 0;
+}
+
+static void catch_signals(int signal)
+{
+	if (pthread_rwlock_wrlock(&rtc.lock)) {
+		warn("could not get lock");
+		return;
+	}
+	switch (signal) {
+	case SIGUSR1:
+		rtc.msg_type = STATE_DISABLE;
+		break;
+	case SIGUSR2:
+		rtc.msg_type = STATE_MAINTENANCE;
+		break;
+	case SIGWINCH:
+		rtc.msg_type = STATE_ENABLE;
+		break;
+	default:
+		/* should be impossible to reach */
+		abort();
+	}
+	rtc.msg_len = strlen(state_messages[rtc.msg_type]);
+	pthread_rwlock_unlock(&(rtc.lock));
+	update_pid_file(&rtc);
+}
+
+static void __attribute__((__noreturn__))
+faillog(char *msg)
+{
+	syslog(LOG_ERR, "%s: %s", msg, strerror(errno));
+	exit(EXIT_FAILURE);
+}
+
+static int read_status_from_file(struct runtime_config *rtc)
+{
+	char *pid_file = construct_pidfile(rtc);
+	FILE *pidfd;
+	int ret;
+
+	if (!(pidfd = fopen(pid_file, "r")))
+		return 1;
+	fscanf(pidfd, "%d %d", &ret, &(rtc->msg_type));
+	switch (rtc->msg_type) {
+	case STATE_DISABLE:
+	case STATE_MAINTENANCE:
+	case STATE_ENABLE:
+		ret = 0;
+		break;
+	default:
+		rtc->msg_type = STATE_UNKNOWN;
+		ret = 1;
+	}
+	rtc->msg_len = strlen(state_messages[rtc->msg_type]);
+	fclose(pidfd);
+	return ret;
 }
 
 static void daemonize(void)
@@ -227,7 +252,7 @@ static void run_server(struct runtime_config *rtc)
 		err(EXIT_FAILURE, "cannot init read-write lock");
 
 	daemonize();
-	if (update_pid_file(rtc))
+	if (rtc->msg_type == STATE_UNKNOWN && read_status_from_file(rtc) && update_pid_file(rtc))
 		faillog("cannot write pid file");
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 	signal(SIGHUP, stop_server);
