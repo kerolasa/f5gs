@@ -142,8 +142,6 @@ static char *construct_pidfile(struct runtime_config *rtc)
 	char *path;
 	void *p;
 	char s[INET6_ADDRSTRLEN];
-	struct sockaddr_in port;
-	socklen_t port_len = sizeof(struct sockaddr);
 
 	inet_ntop(rtc->res->ai_family, rtc->res->ai_addr->sa_data, s, sizeof(s));
 	switch (rtc->res->ai_family) {
@@ -155,8 +153,7 @@ static char *construct_pidfile(struct runtime_config *rtc)
 		break;
 	}
 	inet_ntop(rtc->res->ai_family, p, s, sizeof(s));
-	getsockname(rtc->server_s, (struct sockaddr *)&port, &port_len);
-	asprintf(&path, "%s/%s:%d", rtc->statedir, s, ntohs(port.sin_port));
+	asprintf(&path, "%s/%s:%d", rtc->statedir, s, ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
 	return path;
 }
 
@@ -338,6 +335,17 @@ int main(int argc, char **argv)
 	else if (server) {
 		rtc.msg_type = STATE_UNKNOWN;
 		rtc.msg_len = strlen(state_messages[STATE_UNKNOWN]);
+	} else if (send_signal) {
+		pid_t pid;
+		FILE *pidfd;
+		char *pid_file = construct_pidfile(&rtc);
+		if (!(pidfd = fopen(pid_file, "r")))
+			err(EXIT_FAILURE, "cannot open pid file: %s", pid_file);
+		fscanf(pidfd, "%d", &pid);
+		fclose(pidfd);
+		free(pid_file);
+		if (kill(pid, send_signal))
+			err(EXIT_FAILURE, "sending signal failed");
 	}
 
 	if (server)
