@@ -5,10 +5,22 @@ AM_CPPFLAGS = \
 	-I$(top_builddir)/lib \
 	-DF5GS_RUNDIR=\"$(f5gs_rundir)\"
 
-EXTRA_DIST = m4/gnulib-cache.m4
+EXTRA_DIST = m4/gnulib-cache.m4 f5gs.8.in
 SUBDIRS = lib
 
 bin_PROGRAMS = f5gs
 f5gs_SOURCES = f5gs.c
 f5gs_LDADD = $(top_builddir)/lib/libf5gs.la $(LIB_PTHREAD)
+
+edit = sed \
+	-e 's|@PACKAGE_BUGREPORT[@]|$(PACKAGE_BUGREPORT)|g' \
+	-e 's|@PACKAGE_MAINTAINER[@]|$(PACKAGE_MAINTAINER)|g' \
+	-e 's|@PACKAGE_STRING[@]|$(PACKAGE_STRING)|g' \
+	-e 's|@PACKAGE_URL[@]|$(PACKAGE_URL)|g' \
+	-e 's|@PACKAGE_VERSION[@]|$(PACKAGE_VERSION)|g' \
+	-e 's|@PORT_NUM[@]|$(PORT_NUM)|g' \
+	-e 's|@f5gs_rundir[@]|$(f5gs_rundir)|g'
+
+f5gs.8: f5gs.8.in
+	$(edit) $(srcdir)/f5gs.8.in >$@
 man_MANS = f5gs.8

@@ -29,7 +29,6 @@
 #include "closeout.h"
 #include "progname.h"
 
-#define PORT_NUM	    "32546"	/* f5 == in octal */
 #define PEND_CONNECTIONS      128	/* pending connections to hold */
 #define IGNORE_BYTES	      256
 

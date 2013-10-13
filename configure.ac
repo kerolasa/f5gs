@@ -3,7 +3,12 @@
 
 AC_PREREQ([2.69])
 AC_CONFIG_MACRO_DIR([m4])
-AC_INIT([f5gs], [0.1], [kerolasa@iki.fi])
+AC_INIT([f5gs],
+	[m4_esyscmd([build-aux/git-version-gen .tarball-version])],
+	[kerolasa@iki.fi], [],
+	[https://github.com/kerolasa/f5gs])
+PACKAGE_MAINTAINER="Sami Kerola"
+AC_SUBST([PACKAGE_MAINTAINER])
 AC_CONFIG_SRCDIR([f5gs.c])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -37,6 +42,14 @@ AC_TYPE_SSIZE_T
 # Checks for library functions.
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([munmap socket])
+
+AC_DEFUN([DEFAULT_PORT], [32546])
+AC_ARG_WITH([default-portl],
+	[AS_HELP_STRING([--with-default-port=NUM], [default port (@<:@DEFAULT_PORT@:>@)])],
+	[default_port="$withval"],
+	[default_port="DEFAULT_PORT"])
+AC_DEFINE_UNQUOTED([PORT_NUM], ["$default_port"], [default port])
+AC_SUBST([PORT_NUM], [$default_port])
 
 AC_SUBST([f5gs_rundir], [$runstatedir/$PACKAGE/], [f5gs runtime state directory])
 

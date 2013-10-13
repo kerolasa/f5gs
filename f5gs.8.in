@@ -1,6 +1,6 @@
 .\"
 .\" Please read 'man 7 groff_man' howto use various macros.
-.TH F5GS "8" "2013-10-13" "f5gs" "System Administration"
+.TH F5GS "8" "2013-10-13" "@PACKAGE_STRING@" "System Administration"
 .SH NAME
 f5gs \- F5 graceful scaling helper daemon
 .SH SYNOPSIS
@@ -17,7 +17,7 @@ indicating the service state with content of the backend service is
 difficult.
 .PP
 This daemon will listen a TCP port
-.BR 32546 .
+.BR @PORT_NUM@ .
 All connections to that port will be replied with one of the following
 responses:
 .IR disable ,
@@ -84,13 +84,13 @@ that binds the server to all interface.
 TCP
 .I port
 of the server.  Default port is
-.IR 32546 .
+.IR @PORT_NUM@ .
 .TP
 \fB\-\-state\fR \fIdirectory\fR
 Relocate the command
 .I state directory
 to elsewhere from
-.IR /var\:/run\:/f5gs/ .
+.IR @f5gs_rundir@ .
 .TP
 \fB\-V\fR, \fB\-\-version\fR
 Display version information and exit.
@@ -102,23 +102,22 @@ f5gs --server
 .br
 f5gs --enable
 .br
-echo hello | nc localhost 32546 ; echo
+echo hello | nc localhost @PORT_NUM@ ; echo
 .SH LICENSE
 The f5gs has BSD 2-clause license which also known as "Simplified BSD
 License" or "FreeBSD License".
 .SH FILES
 .TP
-.B /var\:/run\:/f5gs/
+.B @f5gs_rundir@
 Location of the state files.
 .SH AUTHORS
-.MT kerolasa@iki.fi
-Sami Kerola
+.MT @PACKAGE_BUGREPORT@
+@PACKAGE_MAINTAINER@
 .ME
 .SH "SEE ALSO"
 .UR https://\:devcentral.f5.com\:/articles\:/f5-friday-gracefully-scaling-down
 F5 Friday: Gracefully Scaling Down
 .UE .
 .SH AVAILABILITY
-.UR https://\:github.com\:/kerolasa\:/f5gs
-Github
-.UE .
+.UR @PACKAGE_URL@
+.UE
