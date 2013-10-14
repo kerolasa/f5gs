@@ -253,6 +253,8 @@ static void catch_signals(int signal)
 	rtc.msg_len = strlen(state_messages[rtc.msg_type]);
 	update_pid_file(&rtc);
 	pthread_rwlock_unlock(&(rtc.lock));
+	syslog(LOG_INFO, "signal received, state is %s", state_messages[rtc.msg_type]);
+	closelog();
 }
 
 static int read_status_from_file(struct runtime_config *rtc)
@@ -362,7 +364,7 @@ static void run_server(struct runtime_config *rtc)
 	signal(SIGHUP, stop_server);
 	signal(SIGINT, stop_server);
 	signal(SIGTERM, stop_server);
-	syslog(LOG_INFO, "started");
+	syslog(LOG_INFO, "started in state %s", state_messages[rtc->msg_type]);
 
 	for (i = 0; i < NUM_WORKERS; i++) {
 		ids[i] = i;
@@ -476,6 +478,7 @@ int main(int argc, char **argv)
 		rtc.msg_type = STATE_UNKNOWN;
 		rtc.msg_len = strlen(state_messages[STATE_UNKNOWN]);
 	} else if (send_signal) {
+		char *eptr;
 		pid_t pid;
 		FILE *pidfd;
 		char *pid_file = construct_pidfile(&rtc);
@@ -487,6 +490,13 @@ int main(int argc, char **argv)
 		free(pid_file);
 		if (kill(pid, send_signal))
 			err(EXIT_FAILURE, "sending signal failed");
+		openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
+		eptr = getenv("USER");
+		if (eptr != NULL)
+			syslog(LOG_INFO, "signal was sent by USER: %s", eptr);
+		eptr = getenv("SUDO_USER");
+		if (eptr != NULL)
+			syslog(LOG_INFO, "signal was sent by SUDO_USER: %s", eptr);
 	}
 
 	if (server)
