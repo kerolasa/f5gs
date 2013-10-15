@@ -26,6 +26,10 @@ BuildRequires: texinfo
 BuildRequires: xz
 BuildRequires: autoconf >= 2.69
 BuildRequires: automake
+Requires(post): chkconfig
+Requires(postun): initscripts
+Requires(preun): chkconfig
+Requires(preun): initscripts
 
 %description
 This is a simple tcp daemon, which is intented to be used as a messanger
@@ -41,8 +45,24 @@ state of the service.
 make %{?_smp_mflags}
 
 %install
-rm -rf %{buildroot}
-make install DESTDIR=%{buildroot}
+[ "%{buildroot}" != / ] && %{__rm} -rf "%{buildroot}"
+%{__make} install DESTDIR=%{buildroot}
+# %{_initddir} does not exist in EPEL 4 & 5, use the deprecated %{_initrddir} macro instead
+%{__install} -p -D -m 755 contrib/init.redhat %{buildroot}%{_initddir}/%{name}
+
+%post
+/sbin/chkconfig --add %{name}
+
+%preun
+if [ $1 = 0 ] ; then
+	/sbin/service %{name} stop >/dev/null 2>&1
+	/sbin/chkconfig --del %{name}
+fi
+
+%postun
+if [ "$1" -ge "1" ] ; then
+	/sbin/service %{name} condrestart >/dev/null 2>&1 || :
+fi
 
 %clean
 rm -rf %{buildroot}
@@ -52,7 +72,11 @@ rm -rf %{buildroot}
 %doc COPYING
 %doc %_mandir/man*/*
 %_bindir/*
+%{_initddir}/%{name}
 
 %changelog
+* Tue Oct 15 2013  Sami Kerola <kerolasa@iki.fi>
+- Add init script.
+
 * Mon Oct 14 2013  Sami Kerola <kerolasa@iki.fi>
 - Add a rpm spec file.

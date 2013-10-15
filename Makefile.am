@@ -5,7 +5,11 @@ AM_CPPFLAGS = \
 	-I$(top_builddir)/lib \
 	-DF5GS_RUNDIR=\"$(f5gs_rundir)\"
 
-EXTRA_DIST = m4/gnulib-cache.m4 f5gs.8.in
+EXTRA_DIST = \
+	m4/gnulib-cache.m4 \
+	f5gs.8.in \
+	contrib/init.redhat
+
 SUBDIRS = lib
 
 bin_PROGRAMS = f5gs
