@@ -115,7 +115,7 @@ static void __attribute__ ((__noreturn__))
 	fputs(" -e, --enable         enable service\n", out);
 	fputs("\n", out);
 	fputs(" -s, --server         start up health check daemon\n", out);
-	fputs(" -l, --listen <addr>  ip address deamon will listen\n", out);
+	fputs(" -l, --listen <addr>  ip address daemon will listen\n", out);
 	fprintf(out, " -p, --port <port>    health check tcp port (default: %s)\n", PORT_NUM);
 	fprintf(out, "     --state <dir>    path of the state dir (default: %s)\n", F5GS_RUNDIR);
 	fputs("\n", out);
