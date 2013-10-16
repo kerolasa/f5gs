@@ -55,6 +55,7 @@
 #include <sys/types.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 #include "close-stream.h"
 #include "closeout.h"
@@ -91,6 +92,8 @@ struct runtime_config {
 	int msg_type;
 	size_t msg_len;
 	char *statedir;
+	char **argv;
+	int send_signal;
 };
 
 static struct runtime_config rtc;
@@ -383,6 +386,38 @@ static void run_server(struct runtime_config *rtc)
 	}
 }
 
+static int run_script(struct runtime_config *rtc, char *script)
+{
+	pid_t child;
+	int status;
+
+	child = fork();
+	if (0 <= child) {
+		if (child == 0)
+			return execv(script, rtc->argv);
+		else {
+			wait(&status);
+			return WEXITSTATUS(status);
+		}
+	}
+	warn("running %s failed", script);
+	return 1;
+}
+
+static int change_state(struct runtime_config *rtc, pid_t pid)
+{
+	int ret = 0;
+	if (!access(F5GS_PRE, X_OK))
+		ret = run_script(rtc, F5GS_PRE);
+	if (!ret)
+		ret = kill(pid, rtc->send_signal);
+	else
+		return ret;
+	if (!access(F5GS_POST, X_OK))
+		run_script(rtc, F5GS_POST);
+	return ret;
+}
+
 static char *get_server_status(struct runtime_config *rtc)
 {
 	int sfd;
@@ -397,7 +432,7 @@ static char *get_server_status(struct runtime_config *rtc)
 
 int main(int argc, char **argv)
 {
-	int c, server = 0, send_signal = 0;
+	int c, server = 0;
 	char *listen = NULL, *port = PORT_NUM;
 	struct addrinfo hints;
 	int e;
@@ -422,18 +457,19 @@ int main(int argc, char **argv)
 	atexit(close_stdout);
 
 	memset(&rtc, 0, sizeof(struct runtime_config));
+	rtc.argv = argv;
 	rtc.statedir = F5GS_RUNDIR;
 
 	while ((c = getopt_long(argc, argv, "dmesl:p:Vh", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
-			send_signal = state_signals[STATE_DISABLE];
+			rtc.send_signal = state_signals[STATE_DISABLE];
 			break;
 		case 'm':
-			send_signal = state_signals[STATE_MAINTENANCE];
+			rtc.send_signal = state_signals[STATE_MAINTENANCE];
 			break;
 		case 'e':
-			send_signal = state_signals[STATE_ENABLE];
+			rtc.send_signal = state_signals[STATE_ENABLE];
 			break;
 		case 's':
 			server = 1;
@@ -472,12 +508,12 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	if (send_signal && server)
-		kill(getpid(), send_signal);
+	if (rtc.send_signal && server)
+		change_state(&rtc, getpid());
 	else if (server) {
 		rtc.msg_type = STATE_UNKNOWN;
 		rtc.msg_len = strlen(state_messages[STATE_UNKNOWN]);
-	} else if (send_signal) {
+	} else if (rtc.send_signal) {
 		char *eptr;
 		pid_t pid;
 		FILE *pidfd;
@@ -488,8 +524,13 @@ int main(int argc, char **argv)
 		if (close_stream(pidfd))
 			syslog(LOG_ERR, "close failed: %s: %s", pid_file, strerror(errno));
 		free(pid_file);
-		if (kill(pid, send_signal))
-			err(EXIT_FAILURE, "sending signal failed");
+		if (change_state(&rtc, pid)) {
+			if (errno == 0) {
+				errx(EXIT_FAILURE, "execution of %s failed", F5GS_PRE);
+			} else {
+				err(EXIT_FAILURE, "sending signal failed");
+			}
+		}
 		openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 		eptr = getenv("USER");
 		if (eptr != NULL)

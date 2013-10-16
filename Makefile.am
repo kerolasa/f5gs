@@ -3,6 +3,8 @@ ACLOCAL_AMFLAGS = -I m4
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/lib \
 	-I$(top_builddir)/lib \
+	-DF5GS_POST=\"$(f5gs_post)\" \
+	-DF5GS_PRE=\"$(f5gs_pre)\" \
 	-DF5GS_RUNDIR=\"$(f5gs_rundir)\"
 
 EXTRA_DIST = \
@@ -27,6 +29,8 @@ edit = sed \
 	-e 's|@PACKAGE_URL[@]|$(PACKAGE_URL)|g' \
 	-e 's|@PACKAGE_VERSION[@]|$(PACKAGE_VERSION)|g' \
 	-e 's|@PORT_NUM[@]|$(PORT_NUM)|g' \
+	-e 's|@f5gs_post[@]|$(f5gs_post)|g' \
+	-e 's|@f5gs_pre[@]|$(f5gs_pre)|g' \
 	-e 's|@f5gs_rundir[@]|$(f5gs_rundir)|g'
 
 f5gs.8: f5gs.8.in

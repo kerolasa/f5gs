@@ -115,6 +115,20 @@ The f5gs has BSD 2-clause license which also known as "Simplified BSD
 License" or "FreeBSD License".
 .SH FILES
 .TP
+.B @f5gs_pre@
+An executable that is ran before state change signal is sent.  If a
+return value of the executable is not success
+.RB ( 0 )
+the state change is cancelled.  The executable will receive same command
+line options and arguments as the original
+.BR f5gs .
+.TP
+.B @f5gs_post@
+An executable that is ran after state change signal is sent.  Return
+value of the executable is ignored.  The executable will receive same
+command line options and arguments as the original
+.BR f5gs .
+.TP
 .B @f5gs_rundir@
 Location of the state files.
 .SH AUTHORS

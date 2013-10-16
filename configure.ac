@@ -51,6 +51,8 @@ AC_ARG_WITH([default-portl],
 AC_DEFINE_UNQUOTED([PORT_NUM], ["$default_port"], [default port])
 AC_SUBST([PORT_NUM], [$default_port])
 
+AC_SUBST([f5gs_post], [$sysconfdir/$PACKAGE/post], [f5gs signaling post])
+AC_SUBST([f5gs_pre], [$sysconfdir/$PACKAGE/pre], [f5gs signaling pre])
 AC_SUBST([f5gs_rundir], [$runstatedir/$PACKAGE/], [f5gs runtime state directory])
 
 AC_CONFIG_FILES([Makefile
