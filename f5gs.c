@@ -152,7 +152,7 @@ struct request *get_request(pthread_mutex_t *p_mutex)
 	return req;
 }
 
-void handle_request(struct request *req)
+static void handle_request(struct request *req)
 {
 	char in_buf[IGNORE_BYTES];
 
@@ -305,7 +305,7 @@ static void daemonize(void)
 	}
 }
 
-void stop_server(int sig __attribute__ ((__unused__)))
+static void stop_server(int sig __attribute__ ((__unused__)))
 {
 	pthread_rwlock_destroy(&(rtc.lock));
 	close(rtc.server_s);
@@ -313,7 +313,7 @@ void stop_server(int sig __attribute__ ((__unused__)))
 	closelog();
 }
 
-void add_request(int client_s, pthread_mutex_t *p_mutex, pthread_cond_t *p_cond_var)
+static void add_request(int client_s, pthread_mutex_t *p_mutex, pthread_cond_t *p_cond_var)
 {
 	struct request *added;
 
@@ -383,7 +383,7 @@ static void run_server(struct runtime_config *rtc)
 	}
 }
 
-char *get_server_status(struct runtime_config *rtc)
+static char *get_server_status(struct runtime_config *rtc)
 {
 	int sfd;
 	static char buf[12] = { 0 };	/* 'maintenance' is the longest reply. */
