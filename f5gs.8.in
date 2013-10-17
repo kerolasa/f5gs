@@ -122,11 +122,13 @@ return value of the executable is not success
 the state change is cancelled.  The executable will receive same command
 line options and arguments as the original
 .BR f5gs .
+See
+.I @datadir@/f5gs/pre-script
+for an example how to write a srcipt like this.
 .TP
 .B @f5gs_post@
 An executable that is ran after state change signal is sent.  Return
-value of the executable is ignored.  The executable will receive same
-command line options and arguments as the original
+value of the executable is ignored.  For the rest see pre script above.
 .BR f5gs .
 .TP
 .B @f5gs_rundir@

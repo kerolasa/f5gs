@@ -29,6 +29,7 @@ edit = sed \
 	-e 's|@PACKAGE_URL[@]|$(PACKAGE_URL)|g' \
 	-e 's|@PACKAGE_VERSION[@]|$(PACKAGE_VERSION)|g' \
 	-e 's|@PORT_NUM[@]|$(PORT_NUM)|g' \
+	-e 's|@datadir[@]|$(datadir)|g' \
 	-e 's|@f5gs_post[@]|$(f5gs_post)|g' \
 	-e 's|@f5gs_pre[@]|$(f5gs_pre)|g' \
 	-e 's|@f5gs_rundir[@]|$(f5gs_rundir)|g'
@@ -36,3 +37,6 @@ edit = sed \
 f5gs.8: f5gs.8.in
 	$(edit) $(srcdir)/f5gs.8.in >$@
 man_MANS = f5gs.8
+
+extrasdir = $(datadir)/@PACKAGE@
+dist_extras_SCRIPTS = contrib/pre-script

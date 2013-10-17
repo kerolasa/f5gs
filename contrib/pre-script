@@ -1,0 +1,156 @@
+#!/bin/bash
+#
+# Copy this example to '/etc/f5gs/pre' and run 'f5gs -[dme]'
+# Sami Kerola <kerolasa@iki.fi>
+
+# Uncomment if you need to debug.
+#set -x
+# Uncomment if you want to get rid of all output.
+#exec > /dev/null 2>&1
+
+# Default settings.
+SCRIPT_INVOCATION_SHORT_NAME="${0##*/}"
+set -e # exit on errors
+# trap ERR is bashism, do not change shebang!
+trap 'echo "${SCRIPT_INVOCATION_SHORT_NAME}: exit on error"; exit 1' ERR
+set -C # disallow redirection overwrites
+set -u # disallow usage of unset variables
+set -o pipefail # make pipe writer failure to cause exit on error
+
+F5GS_REQUESTED_STATE='dummyvalue'
+F5GS_LISTEN='0.0.0.0'
+F5GS_PORT='32546'
+#F5GS_STATEDIR='/var/run/f5gs'
+RETVAL=0
+
+msg() {
+	echo "${SCRIPT_INVOCATION_SHORT_NAME}: ${@}" >&2
+}
+
+usage() {
+	echo "Usage: $0 [options]"
+	echo "See options from 'f5gs --help'"
+	exit 1
+}
+
+OPTION_DEFINITION=$(
+	getopt -o dmesl:p:hV \
+		-l disable,maintenance,enable,server,listen:,port:,state:,help,version \
+		-n 'pre' -- "$@"
+)
+
+eval set -- "$OPTION_DEFINITION"
+
+while : ; do
+	case "$1" in
+		-d|--disable)
+			F5GS_REQUESTED_STATE='disable'
+			shift
+			;;
+		-m|--maintenance)
+			F5GS_REQUESTED_STATE='maintenance'
+			shift
+			;;
+		-e|--enable)
+			F5GS_REQUESTED_STATE='enable'
+			shift
+			;;
+		-s|--server)
+			# this should be impossible, but ignore just in
+			# case.
+			shift
+			;;
+		-l|--listen)
+			F5GS_LISTEN=$(getent hosts $2 | awk '{print $1; exit 0}')
+			shift 2
+			;;
+		-p|--port)
+			F5GS_PORT="$2"
+			shift 2
+			;;
+		--state)
+			# ignored for now, maybe there is a use for the
+			# value in future.  please send a patch if so.
+			#F5GS_STATEDIR="$2"
+			shift 2
+			;;
+		-h|--help)
+			# this should be impossible, but ignore just in
+			# case.
+			shift
+			;;
+		-V|--version)
+			# this should be impossible, but ignore just in
+			# case.
+			shift
+			;;
+		--)
+			# see 'man getopt' why
+			shift
+			break
+			;;
+		*)
+			# this should be impossible
+			exit 1
+			shift
+			;;
+	esac
+done
+# All command line option related stuff is done.
+
+# If different *_action functions are not re-entrant you need to
+# protect them with something like this.
+CURRENT_STATE=$(f5gs --listen $F5GS_LISTEN --port $F5GS_PORT | sed 's/current status is: //')
+if [ "$CURRENT_STATE" = "$F5GS_REQUESTED_STATE" ]; then
+	msg "requested state is same as run state"
+	exit 1
+fi
+
+# Hint.  If your command in function can or will fail to avoid exit on
+# error you can run the problematic item something like:
+#
+# this_usually_fails || true
+
+disable_actions() {
+	# For example;
+	#iptables --append input rule
+	#/etc/init.d/example stop
+	msg "disable called"
+	return 0
+}
+
+maintenance_actions() {
+	# your imagination is the limit
+	msg "maintenance called"
+	return 0
+}
+
+enable_actions() {
+	# For example;
+	#if /etc/init.d/example status == good
+	#iptables --delete input rule
+	msg "enable called"
+	return 0
+	#else
+	#return 1
+}
+
+# Action function selector.
+case $F5GS_REQUESTED_STATE in
+	disable)
+		RETVAL=$(disable_actions)
+		;;
+	maintenance)
+		RETVAL=$(maintenance_actions)
+		;;
+	enable)
+		RETVAL=$(enable_actions)
+		;;
+	*)
+		msg "was this script ran by manually without state option?"
+		RETVAL=42
+		;;
+esac
+
+exit $RETVAL
+# EOF
