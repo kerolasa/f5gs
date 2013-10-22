@@ -37,6 +37,7 @@ edit = sed \
 f5gs.8: f5gs.8.in
 	$(edit) $(srcdir)/f5gs.8.in >$@
 man_MANS = f5gs.8
+CLEANFILES = f5gs.8
 
 extrasdir = $(datadir)/@PACKAGE@
 dist_extras_SCRIPTS = contrib/pre-script
