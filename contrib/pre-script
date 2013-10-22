@@ -1,6 +1,8 @@
 #!/bin/bash
 #
-# Copy this example to '/etc/f5gs/pre' and run 'f5gs -[dme]'
+# Example f5gs pre state change script.
+# Usually found from path: /etc/f5gs/pre
+#
 # Sami Kerola <kerolasa@iki.fi>
 
 # Uncomment if you need to debug.
@@ -98,53 +100,34 @@ while : ; do
 done
 # All command line option related stuff is done.
 
-# If different *_action functions are not re-entrant you need to
-# protect them with something like this.
 CURRENT_STATE=$(f5gs --listen $F5GS_LISTEN --port $F5GS_PORT | sed 's/current status is: //')
 if [ "$CURRENT_STATE" = "$F5GS_REQUESTED_STATE" ]; then
 	msg "requested state is same as run state"
 	exit 1
 fi
 
-# Hint.  If your command in function can or will fail to avoid exit on
-# error you can run the problematic item something like:
-#
-# this_usually_fails || true
-
-disable_actions() {
-	# For example;
-	#iptables --append input rule
-	#/etc/init.d/example stop
-	msg "disable called"
+set_iptables_rules() {
+	iptables -A INPUT -m pkttype --pkt-type multicast -j DROP
+	iptables -A OUTPUT -m pkttype --pkt-type multicast -j DROP
 	return 0
 }
 
-maintenance_actions() {
-	# your imagination is the limit
-	msg "maintenance called"
+remove_iptables_rules() {
+	iptables -D INPUT -m pkttype --pkt-type multicast -j DROP
+	iptables -D OUTPUT -m pkttype --pkt-type multicast -j DROP
 	return 0
 }
 
-enable_actions() {
-	# For example;
-	#if /etc/init.d/example status == good
-	#iptables --delete input rule
-	msg "enable called"
-	return 0
-	#else
-	#return 1
-}
-
-# Action function selector.
-case $F5GS_REQUESTED_STATE in
-	disable)
-		RETVAL=$(disable_actions)
+# What should be done.
+case "$CURRENT_STATE:$F5GS_REQUESTED_STATE" in
+	'unknown:enable'|'maintenance:disable'|'disable:maintenance')
+		: # do nothing
 		;;
-	maintenance)
-		RETVAL=$(maintenance_actions)
+	'enable:maintenance'|'enable:disable'|'unknown:disable'|'unknown:maintenance')
+		set_iptables_rules
 		;;
-	enable)
-		RETVAL=$(enable_actions)
+	'disable:enable'|'maintenance:enable')
+		remove_iptables_rules
 		;;
 	*)
 		msg "was this script ran by manually without state option?"
