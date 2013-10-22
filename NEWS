@@ -1,2 +1,23 @@
+2013-10-22
+	Release v0.2 that makes the utility to behave like a reasonable
+	daemon.  It also includes manual page, autotools setup with
+	gnulib to make the thing portable.
+
+	There is also support for pre and post state change scripts,
+	that one can use to do additional tasks at a time of an event.
+	The reason why a script support was added is local installation
+	I am working with.  When a java service is put to maintenance
+	or disable state, e.g., F5 is told not to send trafic,
+	broadcast messaging from that java service has to be halted as
+	well.  The easiest way to do that is to add a iptables deny
+	rule for broadcasts, but I cannot possibly add such to the
+	f5gs, so the support for 'random' actions has to be external.
+
+	My intention is to control contents of pre annd post scripts
+	with puppet.  The nice thing about this decision is that the
+	puppet is environment aware, so I can fairly precisely tell
+	what sort of additional actions are needed on a server I plan
+	to control.
+
 2013-10-09
 	The beginning.
