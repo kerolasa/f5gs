@@ -73,8 +73,12 @@ rm -rf %{buildroot}
 %doc %_mandir/man*/*
 %_bindir/*
 %{_initddir}/%{name}
+%_datadir/%{name}/*
 
 %changelog
+* Tue Oct 22 2013  Sami Kerola <kerolasa@iki.fi>
+- Add pre-script example to rpm.
+
 * Tue Oct 15 2013  Sami Kerola <kerolasa@iki.fi>
 - Add init script.
 
