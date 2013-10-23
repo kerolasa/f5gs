@@ -41,7 +41,7 @@ AC_TYPE_SSIZE_T
 
 # Checks for library functions.
 AC_FUNC_MMAP
-AC_CHECK_FUNCS([munmap socket])
+AC_CHECK_FUNCS([clearenv])
 
 AC_DEFUN([DEFAULT_PORT], [32546])
 AC_ARG_WITH([default-portl],

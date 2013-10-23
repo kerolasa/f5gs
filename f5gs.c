@@ -395,6 +395,12 @@ static int run_script(struct runtime_config *rtc, char *script)
 	if (0 <= child) {
 		if (child == 0) {
 			setuid(geteuid ());
+#ifdef HAVE_CLEARENV
+			clearenv();
+#else
+			environ = NULL;
+#endif
+			setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin", 1);
 			return execv(script, rtc->argv);
 		} else {
 			wait(&status);
