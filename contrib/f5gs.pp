@@ -12,13 +12,13 @@
 class f5gs {
 
   file { '/etc/f5gs':
-    ensure => directory,
+    ensure => 'directory',
     owner  => 'root',
     group  => 'root',
     mode   => '0555',
   } ->
   file { '/etc/f5gs/pre':
-    ensure => present,
+    ensure => 'present',
     owner  => 'root',
     group  => 'root',
     mode   => '0555',
@@ -29,10 +29,10 @@ class f5gs {
     ensure => present
   } ->
   service { 'f5gs':
-    ensure     => running,
-    enable     => enabled,
-    hasstatus  => true,
-    hasrestart => true,
+    ensure     => 'running',
+    enable     => 'true',
+    hasstatus  => 'true',
+    hasrestart => 'true',
   } ->
   file { '/usr/bin/f5gs':
     owner => 'root',
