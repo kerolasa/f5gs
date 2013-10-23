@@ -393,9 +393,10 @@ static int run_script(struct runtime_config *rtc, char *script)
 
 	child = fork();
 	if (0 <= child) {
-		if (child == 0)
+		if (child == 0) {
+			setuid(geteuid ());
 			return execv(script, rtc->argv);
-		else {
+		} else {
 			wait(&status);
 			return WEXITSTATUS(status);
 		}
