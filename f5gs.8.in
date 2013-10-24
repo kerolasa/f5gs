@@ -133,6 +133,16 @@ value of the executable is ignored.  For the rest see pre script above.
 .TP
 .B @f5gs_rundir@
 Location of the state files.
+.SH ENVIRONMENT
+The
+.B f5gs
+will hardcode PATH to have value
+.I /bin:\:/usr/bin:\:/sbin:\:/usr/sbin
+and other environment variables before running
+.I pre
+or
+.I post
+executables.
 .SH AUTHORS
 .MT @PACKAGE_BUGREPORT@
 @PACKAGE_MAINTAINER@
