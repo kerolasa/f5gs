@@ -138,7 +138,7 @@ The
 .B f5gs
 will hardcode PATH to have value
 .I /bin:\:/usr/bin:\:/sbin:\:/usr/sbin
-and other environment variables before running
+and other environment variables are removed before running
 .I pre
 or
 .I post
