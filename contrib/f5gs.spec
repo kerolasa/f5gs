@@ -31,6 +31,10 @@ Requires(postun): initscripts
 Requires(preun): chkconfig
 Requires(preun): initscripts
 
+# Define init script directory.  %{_initddir} is available from RHEL 6
+# forward; RHEL 5 knows only %{_initrddir}.
+%{!?_initddir: %{expand: %%global _initddir %{_initrddir}}}
+
 %description
 This is a simple tcp daemon, which is intented to be used as a messanger
 from a server to a F5 load balancing switch.  One is expected to make a
@@ -47,7 +51,6 @@ make %{?_smp_mflags}
 %install
 [ "%{buildroot}" != / ] && %{__rm} -rf "%{buildroot}"
 %{__make} install DESTDIR=%{buildroot}
-# %{_initddir} does not exist in EPEL 4 & 5, use the deprecated %{_initrddir} macro instead
 %{__install} -p -D -m 755 contrib/init.redhat %{buildroot}%{_initddir}/%{name}
 
 %post
