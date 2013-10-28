@@ -14,7 +14,7 @@
 SCRIPT_INVOCATION_SHORT_NAME="${0##*/}"
 set -e # exit on errors
 # trap ERR is bashism, do not change shebang!
-trap 'echo "${SCRIPT_INVOCATION_SHORT_NAME}: exit on error"; exit 1' ERR
+trap 'echo "${SCRIPT_INVOCATION_SHORT_NAME}: exit on error" >&2; exit 1' ERR
 set -C # disallow redirection overwrites
 set -u # disallow usage of unset variables
 set -o pipefail # make pipe writer failure to cause exit on error
@@ -31,14 +31,14 @@ msg() {
 
 usage() {
 	echo "Usage: $0 [options]"
-	echo "See options from 'f5gs --help'"
+	echo 'See options from: f5gs --help'
 	exit 1
 }
 
 OPTION_DEFINITION=$(
 	getopt -o dmesl:p:hV \
 		-l disable,maintenance,enable,server,listen:,port:,state:,help,version \
-		-n 'pre' -- "$@"
+		-n "$SCRIPT_INVOCATION_SHORT_NAME" -- "$@"
 )
 
 eval set -- "$OPTION_DEFINITION"
@@ -63,7 +63,7 @@ while : ; do
 			shift
 			;;
 		-l|--listen)
-			F5GS_LISTEN=$(getent hosts $2 | awk '{print $1; exit 0}')
+			F5GS_LISTEN=$(getent hosts "$2" | awk '{print $1; exit 0}')
 			shift 2
 			;;
 		-p|--port)
@@ -79,6 +79,7 @@ while : ; do
 		-h|--help)
 			# this should be impossible, but ignore just in
 			# case.
+			usage
 			shift
 			;;
 		-V|--version)
@@ -100,19 +101,21 @@ while : ; do
 done
 # All command line option related stuff is done.
 
-CURRENT_STATE=$(f5gs --listen $F5GS_LISTEN --port $F5GS_PORT | sed 's/current status is: //')
+CURRENT_STATE=$(f5gs --listen $F5GS_LISTEN --port $F5GS_PORT | sed 's/^current status is: //')
 if [ "$CURRENT_STATE" = "$F5GS_REQUESTED_STATE" ]; then
-	msg "requested state is same as run state"
+	msg 'requested state is same as run state'
 	exit 1
 fi
 
 set_iptables_rules() {
+	trap 'return 1' ERR
 	iptables -A INPUT -m pkttype --pkt-type multicast -j DROP
 	iptables -A OUTPUT -m pkttype --pkt-type multicast -j DROP
 	return 0
 }
 
 remove_iptables_rules() {
+	trap 'return 1' ERR
 	iptables -D INPUT -m pkttype --pkt-type multicast -j DROP
 	iptables -D OUTPUT -m pkttype --pkt-type multicast -j DROP
 	return 0
@@ -130,7 +133,7 @@ case "$CURRENT_STATE:$F5GS_REQUESTED_STATE" in
 		remove_iptables_rules
 		;;
 	*)
-		msg "was this script ran by manually without state option?"
+		msg 'was this script ran by manually without state option?'
 		RETVAL=42
 		;;
 esac
