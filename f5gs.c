@@ -174,7 +174,6 @@ static void *response_thread(void *arg __attribute__ ((__unused__)))
 {
 	struct request *req;
 
-	pthread_mutex_lock(&request_mutex);
 	while (1) {
 		if (0 < num_requests) {
 			req = get_request(&request_mutex);
