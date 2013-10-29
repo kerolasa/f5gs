@@ -344,14 +344,20 @@ static void run_server(struct runtime_config *rtc)
 	socklen_t addr_len;
 	unsigned int ids[NUM_WORKERS], i;
 	pthread_attr_t attr;
+	struct timeval timeout;
 	pthread_t threads[NUM_WORKERS];
 
 	if (!(rtc->server_s = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
 		err(EXIT_FAILURE, "cannot create socket");
+	timeout.tv_sec = 1;
+	timeout.tv_usec = 0;
+	if (setsockopt(rtc->server_s, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
+		err(EXIT_FAILURE, "setsockopt failed\n");
 	if (bind(rtc->server_s, rtc->res->ai_addr, rtc->res->ai_addrlen))
 		err(EXIT_FAILURE, "unable to bind");
 	if (listen(rtc->server_s, SOMAXCONN))
 		err(EXIT_FAILURE, "unable to listen");
+
 	if (pthread_attr_init(&attr))
 		err(EXIT_FAILURE, "cannot init thread attribute");
 
