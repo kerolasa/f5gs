@@ -132,11 +132,16 @@ static void *handle_request(void *voidsocket)
 {
 	int sock = *(int *) voidsocket;
 	char in_buf[IGNORE_BYTES];
+	struct timeval timeout;
 
 	pthread_rwlock_rdlock(&(rtc.lock));
 	send(sock, state_messages[rtc.msg_type], rtc.msg_len, 0);
 	pthread_rwlock_unlock(&(rtc.lock));
 	/* let the client send, and ignore */
+	timeout.tv_sec = 1;
+	timeout.tv_usec = 0;
+	if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
+		err(EXIT_FAILURE, "setsockopt failed\n");
 	recv(sock, in_buf, IGNORE_BYTES, 0);
 	close(sock);
 	free(voidsocket);
@@ -275,7 +280,6 @@ static void run_server(struct runtime_config *rtc)
 	struct sockaddr_in client_addr;
 	socklen_t addr_len;
 	pthread_attr_t attr;
-	struct timeval timeout;
 #ifdef USE_SYSTEMD
 	int ret;
 
@@ -295,11 +299,6 @@ static void run_server(struct runtime_config *rtc)
 #ifdef USE_SYSTEMD
 	}
 #endif
-	timeout.tv_sec = 1;
-	timeout.tv_usec = 0;
-	if (setsockopt(rtc->server_s, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
-		err(EXIT_FAILURE, "setsockopt failed\n");
-
 	if (pthread_attr_init(&attr))
 		err(EXIT_FAILURE, "cannot init thread attribute");
 
