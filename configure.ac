@@ -32,6 +32,13 @@ gl_INIT
 LT_INIT
 
 # Checks for libraries.
+m4_ifndef([PKG_PROG_PKG_CONFIG],
+  [m4_fatal([Could not locate the pkg-config autoconf
+    macros. These are usually located in /usr/share/aclocal/pkg.m4.
+    If your macros are in a different location, try setting the
+    environment variable AL_OPTS="-I/other/macro/dir" before running
+    ./autogen.sh or autoreconf again.])])
+PKG_PROG_PKG_CONFIG
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netinet/in.h sys/socket.h unistd.h])
@@ -42,6 +49,26 @@ AC_TYPE_SSIZE_T
 # Checks for library functions.
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([clearenv])
+
+AC_ARG_ENABLE([systemd],
+	AS_HELP_STRING([--enable-systemd], [build with systemd socket activation]),
+	[enable_systemd=yes],
+	[enable_systemd=no]
+)
+AM_CONDITIONAL([USE_SYSTEMD], [test "x$enable_systemd" = xyes])
+AS_IF([test "x$enable_systemd" = xyes], [
+	AC_DEFINE([USE_SYSTEMD], [1], [use systemd socket activation])
+])
+
+AC_ARG_WITH([systemdsystemunitdir],
+	AS_HELP_STRING([--with-systemdsystemunitdir=DIR], [directory for systemd service files]),
+	[], [with_systemdsystemunitdir=`$PKG_CONFIG --variable=systemdsystemunitdir systemd`])
+
+AS_IF([test "x$with_systemdsystemunitdir" != "xno"], [
+	AC_SUBST([systemdsystemunitdir], [$with_systemdsystemunitdir])
+])
+AM_CONDITIONAL([HAVE_SYSTEMD],
+	[test -n "$with_systemdsystemunitdir" -a "x$with_systemdsystemunitdir" != "xno"])
 
 AC_DEFUN([DEFAULT_PORT], [32546])
 AC_ARG_WITH([default-portl],

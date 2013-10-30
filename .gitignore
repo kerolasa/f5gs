@@ -14,7 +14,10 @@
 /f5gs
 /f5gs.8
 /f5gs.o
+/f5gs.service
+/f5gs.socket
 /lib/
 /libtool
 /m4/
+/sd-daemon.o
 /stamp-h1

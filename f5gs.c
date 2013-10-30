@@ -34,8 +34,6 @@
  * official policies, either expressed or implied, of Sami Kerola.
  */
 
-#include "config.h"
-
 #include <arpa/inet.h>
 #include <err.h>
 #include <errno.h>
@@ -62,6 +60,10 @@
 #include "progname.h"
 
 #define IGNORE_BYTES	      256
+
+#ifdef USE_SYSTEMD
+# include "sd-daemon.h"
+#endif
 
 enum {
 	STATE_DISABLE,
@@ -274,17 +276,29 @@ static void run_server(struct runtime_config *rtc)
 	socklen_t addr_len;
 	pthread_attr_t attr;
 	struct timeval timeout;
+#ifdef USE_SYSTEMD
+	int ret;
 
-	if (!(rtc->server_s = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
-		err(EXIT_FAILURE, "cannot create socket");
+	ret = sd_listen_fds(0);
+	if (1 < ret)
+		faillog("no or too many file descriptors received");
+	else if (ret == 1)
+		rtc->server_s = SD_LISTEN_FDS_START + 0;
+	else {
+#endif
+		if (!(rtc->server_s = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
+			err(EXIT_FAILURE, "cannot create socket");
+		if (bind(rtc->server_s, rtc->res->ai_addr, rtc->res->ai_addrlen))
+			err(EXIT_FAILURE, "unable to bind");
+		if (listen(rtc->server_s, SOMAXCONN))
+			err(EXIT_FAILURE, "unable to listen");
+#ifdef USE_SYSTEMD
+	}
+#endif
 	timeout.tv_sec = 1;
 	timeout.tv_usec = 0;
 	if (setsockopt(rtc->server_s, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed\n");
-	if (bind(rtc->server_s, rtc->res->ai_addr, rtc->res->ai_addrlen))
-		err(EXIT_FAILURE, "unable to bind");
-	if (listen(rtc->server_s, SOMAXCONN))
-		err(EXIT_FAILURE, "unable to listen");
 
 	if (pthread_attr_init(&attr))
 		err(EXIT_FAILURE, "cannot init thread attribute");

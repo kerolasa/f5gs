@@ -1,0 +1,10 @@
+[Unit]
+Description=F5 Graceful Scaling
+
+[Service]
+ExecStart=@bindir@/f5gs --server
+Restart=yes
+TimeoutStopSec=3
+
+[Install]
+WantedBy=multi-user.target

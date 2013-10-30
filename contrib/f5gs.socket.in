@@ -1,0 +1,9 @@
+[Unit]
+Description=F5 Graceful Scaling Socket
+Conflicts=f5gs.service
+
+[Socket]
+ListenStream=@PORT_NUM@
+
+[Install]
+WantedBy=sockets.target
