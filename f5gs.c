@@ -63,6 +63,7 @@
 
 #ifdef USE_SYSTEMD
 # include "sd-daemon.h"
+# include "sd-journal.h"
 #endif
 
 enum {
@@ -124,13 +125,19 @@ static void __attribute__ ((__noreturn__))
 static void __attribute__ ((__noreturn__))
     faillog(char *msg)
 {
+#ifdef USE_SYSTEMD
+	sd_journal_send("MESSAGE=%s", msg,
+			"STRERROR=%s", strerror(errno),
+			"MESSAGE_ID=55c5c406ca894d4c9a56ac0f6dc48ba4", "PRIORITY=3", NULL);
+#else
 	syslog(LOG_ERR, "%s: %s", msg, strerror(errno));
+#endif
 	exit(EXIT_FAILURE);
 }
 
 static void *handle_request(void *voidsocket)
 {
-	int sock = *(int *) voidsocket;
+	int sock = *(int *)voidsocket;
 	char in_buf[IGNORE_BYTES];
 	struct timeval timeout;
 
@@ -182,12 +189,24 @@ static int update_pid_file(struct runtime_config *rtc)
 			return 1;
 	pidfile = construct_pidfile(rtc);
 	if (!(fd = fopen(pidfile, "w"))) {
+#ifdef USE_SYSTEMD
+		sd_journal_send("MESSAGE=could not open file",
+				"MESSAGE_ID=808b998435be405686ff7a83ed33ec1f",
+				"PID_FILE=%s", pidfile, "STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
+#else
 		syslog(LOG_ERR, "could not open file: %s: %s", pidfile, strerror(errno));
+#endif
 		return 1;
 	}
 	fprintf(fd, "%u %d", getpid(), rtc->msg_type);
 	if (close_stream(fd))
+#ifdef USE_SYSTEMD
+		sd_journal_send("MESSAGE=close failed",
+				"MESSAGE_ID=808b998435be405686ff7a83ed33ec1f",
+				"PID_FILE=%s", pidfile, "STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
+#else
 		syslog(LOG_ERR, "close failed: %s: %s", pidfile, strerror(errno));
+#endif
 	free(pidfile);
 	return 0;
 }
@@ -195,7 +214,13 @@ static int update_pid_file(struct runtime_config *rtc)
 static void catch_signals(int signal)
 {
 	if (pthread_rwlock_wrlock(&rtc.lock)) {
+#ifdef USE_SYSTEMD
+		sd_journal_send("MESSAGE=could not get lock",
+				"MESSAGE_ID=808b998435be405686ff7a83ed33ec1f",
+				"STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
+#else
 		syslog(LOG_ERR, "could not get lock");
+#endif
 		return;
 	}
 	switch (signal) {
@@ -215,7 +240,13 @@ static void catch_signals(int signal)
 	rtc.msg_len = strlen(state_messages[rtc.msg_type]);
 	update_pid_file(&rtc);
 	pthread_rwlock_unlock(&(rtc.lock));
+#ifdef USE_SYSTEMD
+	sd_journal_send("MESSAGE=signal received",
+			"MESSAGE_ID=648c63003c634c51aea768a3d37e06ab",
+			"NEW_STATE=%s", state_messages[rtc.msg_type], "PRIORITY=6", NULL);
+#else
 	syslog(LOG_INFO, "signal received, state is %s", state_messages[rtc.msg_type]);
+#endif
 	closelog();
 }
 
@@ -271,7 +302,12 @@ static void stop_server(int sig __attribute__ ((__unused__)))
 {
 	pthread_rwlock_destroy(&(rtc.lock));
 	close(rtc.server_s);
+
+#ifdef USE_SYSTEMD
+	sd_journal_send("MESSAGE=service stopped", "MESSAGE_ID=7798234cee2e4de6a9747d2b94c51d8a", "PRIORITY=6", NULL);
+#else
 	syslog(LOG_INFO, "stopped");
+#endif
 	closelog();
 }
 
@@ -314,7 +350,13 @@ static void run_server(struct runtime_config *rtc)
 	signal(SIGHUP, stop_server);
 	signal(SIGINT, stop_server);
 	signal(SIGTERM, stop_server);
+#ifdef USE_SYSTEMD
+	sd_journal_send("MESSAGE=service started",
+			"MESSAGE_ID=7798234cee2e4de6a9747d2b94c51d8a",
+			"STATE=%s", state_messages[rtc->msg_type], "PRIORITY=6", NULL);
+#else
 	syslog(LOG_INFO, "started in state %s", state_messages[rtc->msg_type]);
+#endif
 
 	while (1) {
 		int accepted;
@@ -338,7 +380,7 @@ static int run_script(struct runtime_config *rtc, char *script)
 	child = fork();
 	if (0 <= child) {
 		if (child == 0) {
-			setuid(geteuid ());
+			setuid(geteuid());
 #ifdef HAVE_CLEARENV
 			clearenv();
 #else
@@ -473,7 +515,14 @@ int main(int argc, char **argv)
 			err(EXIT_FAILURE, "cannot open pid file: %s", pid_file);
 		fscanf(pidfd, "%d", &pid);
 		if (close_stream(pidfd))
+#ifdef USE_SYSTEMD
+			sd_journal_send("MESSAGE=close failed",
+					"PID_FILE=%s", pid_file,
+					"MESSAGE_ID=808b998435be405686ff7a83ed33ec1f",
+					"STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
+#else
 			syslog(LOG_ERR, "close failed: %s: %s", pid_file, strerror(errno));
+#endif
 		free(pid_file);
 		if (change_state(&rtc, pid)) {
 			if (errno == 0) {
@@ -485,10 +534,22 @@ int main(int argc, char **argv)
 		openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 		eptr = getenv("USER");
 		if (eptr != NULL)
+#ifdef USE_SYSTEMD
+			sd_journal_send("MESSAGE=signal was sent",
+					"MESSAGE_ID=146a04082e384f188a9402dd9d4d5cff",
+					"USER=%s", eptr, "PRIORITY=6", NULL);
+#else
 			syslog(LOG_INFO, "signal was sent by USER: %s", eptr);
+#endif
 		eptr = getenv("SUDO_USER");
 		if (eptr != NULL)
+#ifdef USE_SYSTEMD
+			sd_journal_send("MESSAGE=signal was sent",
+					"MESSAGE_ID=146a04082e384f188a9402dd9d4d5cff",
+					"SUDO_USER=%s", eptr, "PRIORITY=6", NULL);
+#else
 			syslog(LOG_INFO, "signal was sent by SUDO_USER: %s", eptr);
+#endif
 	}
 
 	if (server)

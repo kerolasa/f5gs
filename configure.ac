@@ -51,12 +51,13 @@ AC_FUNC_MMAP
 AC_CHECK_FUNCS([clearenv])
 
 AC_ARG_ENABLE([systemd],
-	AS_HELP_STRING([--enable-systemd], [build with systemd socket activation]),
+	AS_HELP_STRING([--enable-systemd], [build with systemd socket activation and use journald messages]),
 	[enable_systemd=yes],
 	[enable_systemd=no]
 )
 AM_CONDITIONAL([USE_SYSTEMD], [test "x$enable_systemd" = xyes])
 AS_IF([test "x$enable_systemd" = xyes], [
+	PKG_CHECK_MODULES([JOURNAL], [libsystemd-journal])
 	AC_DEFINE([USE_SYSTEMD], [1], [use systemd socket activation])
 ])
 
