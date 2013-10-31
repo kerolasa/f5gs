@@ -44,10 +44,11 @@ and
 .I disable
 states are the same.
 .PP
-The daemon will ignore 256 bytes of input.  Any excess input does not get
-read, and will result to a socket error at the other end of the
-connection.  The best idea is to use internal identifier, such as F5 host
-name, as health check input that will enable easy debugging with tcpdump.
+The daemon will client for one second to submit something, and ignore
+first 256 bytes of the submission.  Any excess input does not get read,
+and will result to a socket error at the other end of the connection.
+The best idea is to use internal identifier, such as F5 host name, as
+health check submission, so that debugging with tcpdump is easy.
 .SH OPTIONS
 .TP
 \fB\-d\fR, \fB\-\-disable\fR
@@ -110,6 +111,18 @@ Lack of daemon stop functionality is known quirk, and done on purpose.
 If a host needs this service you will never want to stop the service,
 disabling is as good as stopping.  If you really want stop you should
 kill the process.
+.SH SYSTEMD INTEGRATION
+When compiled with systemd support the
+.B f5gs
+will use socket actication.  The message that usually are sent to
+syslog are using journald native integration.  Message ID fields that
+are in use are
+.TS
+left l35 l.
+e7237db848ae4091b5ce09b2ebb75944 errors
+74605f2715d34b018a2c61c37a994c7b state changes
+f5eb95b2817e4669a8cc40ea839411b3 stop or start
+.TE
 .SH LICENSE
 The f5gs has BSD 2-clause license which also known as "Simplified BSD
 License" or "FreeBSD License".
@@ -148,7 +161,10 @@ executables.
 @PACKAGE_MAINTAINER@
 .ME
 .SH "SEE ALSO"
-.UR https://\:devcentral.f5.com\:/articles\:/f5-friday-gracefully-scaling-down
+.BR systemd (1),
+.BR journalctl (1),
+.BR tcpdump (1),
+.UR https://\:devcentral.\:f5.com\:/articles\:/f5-friday-gracefully-scaling-down
 F5 Friday: Gracefully Scaling Down
 .UE .
 .SH AVAILABILITY
