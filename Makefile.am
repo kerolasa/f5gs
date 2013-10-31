@@ -16,7 +16,7 @@ EXTRA_DIST = \
 SUBDIRS = lib
 
 bin_PROGRAMS = f5gs
-f5gs_SOURCES = f5gs.c
+f5gs_SOURCES = f5gs.c f5gs.h
 f5gs_LDADD = \
 	$(top_builddir)/lib/lib$(PACKAGE).la \
 	$(LIBSOCKET) \
