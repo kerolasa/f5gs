@@ -118,10 +118,11 @@ will use socket actication.  The message that usually are sent to
 syslog are using journald native integration.  Message ID fields that
 are in use are
 .TS
-left l35 l.
-e7237db848ae4091b5ce09b2ebb75944 errors
-74605f2715d34b018a2c61c37a994c7b state changes
-f5eb95b2817e4669a8cc40ea839411b3 stop or start
+tab(^);
+l l.
+e7237db848ae4091b5ce09b2ebb75944^errors^
+74605f2715d34b018a2c61c37a994c7b^state changes^
+f5eb95b2817e4669a8cc40ea839411b3^stop or start^
 .TE
 .SH LICENSE
 The f5gs has BSD 2-clause license which also known as "Simplified BSD
