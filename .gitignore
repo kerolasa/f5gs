@@ -16,6 +16,7 @@
 /f5gs.o
 /f5gs.service
 /f5gs.socket
+/gnulib
 /lib/
 /libtool
 /m4/
