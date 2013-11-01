@@ -448,7 +448,12 @@ int main(int argc, char **argv)
 			rtc.statedir = optarg;
 			break;
 		case 'V':
-			printf("%s version %s\n", PACKAGE_NAME, PACKAGE_VERSION);
+			printf("%s version %s", PACKAGE_NAME, PACKAGE_VERSION);
+#ifdef USE_SYSTEMD
+			puts(" with systemd support");
+#else
+			puts("");
+#endif
 			return EXIT_SUCCESS;
 		case 'h':
 			usage(stdout);
