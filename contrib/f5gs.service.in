@@ -3,8 +3,8 @@ Description=F5 Graceful Scaling
 
 [Service]
 ExecStart=@bindir@/f5gs --server
-Restart=yes
-TimeoutStopSec=3
+ExecStop=/usr/bin/pkill -9 f5gs
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
