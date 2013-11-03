@@ -377,10 +377,8 @@ static int change_state(struct runtime_config *rtc, pid_t pid)
 		ret = run_script(rtc, F5GS_PRE);
 	if (!ret)
 		ret = kill(pid, rtc->send_signal);
-	else
-		return ret;
-	if (!access(F5GS_POST, X_OK))
-		run_script(rtc, F5GS_POST);
+	if (!ret && !access(F5GS_POST, X_OK))
+		ret = run_script(rtc, F5GS_POST);
 	return ret;
 }
 
