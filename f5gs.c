@@ -229,6 +229,7 @@ static int read_status_from_file(struct runtime_config *rtc)
 
 	if (!(pidfd = fopen(pid_file, "r")))
 		return 1;
+	free(pid_file);
 	fscanf(pidfd, "%d %d", &ret, &(rtc->msg_type));
 	switch (rtc->msg_type) {
 	case STATE_DISABLE:
@@ -272,6 +273,7 @@ static void daemonize(void)
 static void stop_server(int sig __attribute__ ((__unused__)))
 {
 	pthread_rwlock_destroy(&(rtc.lock));
+	freeaddrinfo(rtc.res);
 	close(rtc.server_s);
 
 #ifdef USE_SYSTEMD
