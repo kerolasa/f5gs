@@ -1,0 +1,38 @@
+# Archlinux package file. Just download this file, and
+#	makepkg PKGBUILD
+#	pacman -U f5gs*.pkg.tar.xz
+
+pkgname=f5gs
+pkgver=0
+pkgrel=1
+pkgdesc="F5 Graceful Scaling"
+arch=('i686' 'x86_64')
+url=https://github.com/kerolasa/f5gs
+license=('MIT')
+depends=('pacman')
+makedepends=('git')
+source=("$pkgname"::'git://github.com/kerolasa/f5gs')
+md5sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/$pkgname"
+  # Use the tag of the last commit
+  git describe --long | sed -E 's/([^-]*-g)/r\1/;s/-/./g'
+}
+
+build() {
+  cd "$srcdir/$pkgname"
+  ./bootstrap
+  ./configure \
+	--enable-systemd \
+	--prefix=/usr \
+	--bindir=/usr/bin \
+	--localstatedir=/
+  make
+}
+
+package() {
+  cd "$srcdir/$pkgname"
+  make PREFIX=/ DESTDIR="$pkgdir" install
+  mkdir -p $pkgdir/run/f5gs
+}
