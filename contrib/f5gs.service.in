@@ -1,9 +1,10 @@
 [Unit]
 Description=F5 Graceful Scaling
+After=network.target nss-lookup.target
 
 [Service]
+Type=forking
 ExecStart=@bindir@/f5gs --server
-ExecStop=/usr/bin/pkill -9 f5gs
 Restart=always
 
 [Install]
