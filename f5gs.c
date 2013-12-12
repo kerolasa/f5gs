@@ -85,6 +85,7 @@ static void __attribute__ ((__noreturn__))
 	fputs(" -l, --listen <addr>  ip address daemon will listen\n", out);
 	fprintf(out, " -p, --port <port>    health check tcp port (default: %s)\n", PORT_NUM);
 	fprintf(out, "     --state <dir>    path of the state dir (default: %s)\n", F5GS_RUNDIR);
+	fputs("     --no-scripts     do not run pre or post scripts\n", out);
 	fputs("\n", out);
 	fputs(" -h, --help           display this help and exit\n", out);
 	fputs(" -V, --version        output version information and exit\n", out);
@@ -376,11 +377,11 @@ static int run_script(struct runtime_config *rtc, char *script)
 static int change_state(struct runtime_config *rtc, pid_t pid)
 {
 	int ret = 0;
-	if (!access(F5GS_PRE, X_OK))
+	if (rtc->run_scripts && !access(F5GS_PRE, X_OK))
 		ret = run_script(rtc, F5GS_PRE);
 	if (!ret)
 		ret = kill(pid, rtc->send_signal);
-	if (!ret && !access(F5GS_POST, X_OK))
+	if (rtc->run_scripts && !ret && !access(F5GS_POST, X_OK))
 		ret = run_script(rtc, F5GS_POST);
 	return ret;
 }
@@ -404,7 +405,8 @@ int main(int argc, char **argv)
 	struct addrinfo hints;
 	int e;
 	enum {
-		STATEDIR_OPT = CHAR_MAX + 1
+		STATEDIR_OPT = CHAR_MAX + 1,
+		NO_SCRIPTS_OPT
 	};
 
 	static const struct option longopts[] = {
@@ -415,6 +417,7 @@ int main(int argc, char **argv)
 		{"listen", required_argument, NULL, 'l'},
 		{"port", required_argument, NULL, 'p'},
 		{"state", required_argument, NULL, STATEDIR_OPT},
+		{"no-scripts", no_argument, NULL, NO_SCRIPTS_OPT},
 		{"version", no_argument, NULL, 'V'},
 		{"help", no_argument, NULL, 'h'},
 		{NULL, 0, NULL, 0}
@@ -426,6 +429,7 @@ int main(int argc, char **argv)
 	memset(&rtc, 0, sizeof(struct runtime_config));
 	rtc.argv = argv;
 	rtc.statedir = F5GS_RUNDIR;
+	rtc.run_scripts = 1;
 
 	while ((c = getopt_long(argc, argv, "dmesl:p:Vh", longopts, NULL)) != -1) {
 		switch (c) {
@@ -449,6 +453,9 @@ int main(int argc, char **argv)
 			break;
 		case STATEDIR_OPT:
 			rtc.statedir = optarg;
+			break;
+		case NO_SCRIPTS_OPT:
+			rtc.run_scripts = 0;
 			break;
 		case 'V':
 			printf("%s version %s", PACKAGE_NAME, PACKAGE_VERSION);
