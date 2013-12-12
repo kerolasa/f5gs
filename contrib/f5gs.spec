@@ -55,16 +55,18 @@ make %{?_smp_mflags}
 %{__install} -p -D -m 755 contrib/init.redhat %{buildroot}%{_initddir}/%{name}
 
 %post
+# Organizations that have working orchestration should remove post
+# installation, upgrade, and service status actions.
 if [ $1 -eq 1 ] ; then
 	# Install
 	/sbin/chkconfig --add %{name} || :
 	/sbin/service %{name} start >/dev/null 2>&1 || :
-	if [ "$(%{name})" = 'current status is: unknown' ]; then
-		%{name} --enable >/dev/null 2>&1 || :
-	fi
 else
 	# Upgrade
 	/sbin/service %{name} restart >/dev/null 2>&1 || :
+fi
+if [ "$(%{name})" = 'current status is: unknown' ]; then
+	%{name} --enable >/dev/null 2>&1 || :
 fi
 
 %preun
@@ -72,6 +74,10 @@ if [ $1 -eq 0 ] ; then
 	# Uninstall
 	/sbin/service %{name} stop >/dev/null 2>&1 || :
 	/sbin/chkconfig --del %{name} || :
+	# Some want to remove state files automatically.  Unfortunately
+	# there is no %{__runstatedir} so this is as good one can get
+	# the removal.
+	# %{__rm} -rf %{_localstatedir}/run/%{name}
 fi
 
 %clean
