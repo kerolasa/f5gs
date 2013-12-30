@@ -66,7 +66,7 @@ else
 	/sbin/service %{name} restart >/dev/null 2>&1 || :
 fi
 if [ "$(%{name})" = 'current status is: unknown' ]; then
-	%{name} --enable >/dev/null 2>&1 || :
+	%{name} -e >/dev/null 2>&1 || :
 fi
 
 %preun
