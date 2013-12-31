@@ -125,7 +125,7 @@ static void *handle_request(void *voidsocket)
 	recv(sock, in_buf, IGNORE_BYTES, 0);
 	close(sock);
 	free(voidsocket);
-	return NULL;
+	pthread_exit(NULL);
 }
 
 static char *construct_pidfile(struct runtime_config *rtc)
@@ -284,6 +284,7 @@ static void stop_server(int sig __attribute__ ((__unused__)))
 	syslog(LOG_INFO, "stopped");
 	closelog();
 #endif
+	_exit(EXIT_SUCCESS);
 }
 
 static void run_server(struct runtime_config *rtc)
