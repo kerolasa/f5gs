@@ -13,6 +13,7 @@
 /configure
 /f5gs
 /f5gs.8
+/f5gs.c~
 /f5gs.o
 /f5gs.service
 /f5gs.socket

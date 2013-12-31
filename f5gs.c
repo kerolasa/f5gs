@@ -220,7 +220,6 @@ static void catch_signals(int signal)
 #else
 	syslog(LOG_INFO, "signal received, state is %s", state_messages[rtc.msg_type]);
 #endif
-	closelog();
 }
 
 static int read_status_from_file(struct runtime_config *rtc)
@@ -279,11 +278,12 @@ static void stop_server(int sig __attribute__ ((__unused__)))
 	close(rtc.server_s);
 
 #ifdef USE_SYSTEMD
-	sd_journal_send("MESSAGE=service stopped", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START), "PRIORITY=6", NULL);
+	sd_journal_send("MESSAGE=service stopped", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START),
+			"PRIORITY=6", NULL);
 #else
 	syslog(LOG_INFO, "stopped");
-#endif
 	closelog();
+#endif
 }
 
 static void run_server(struct runtime_config *rtc)
@@ -300,6 +300,8 @@ static void run_server(struct runtime_config *rtc)
 	else if (ret == 1)
 		rtc->server_s = SD_LISTEN_FDS_START + 0;
 	else {
+#else
+	{
 #endif
 		int on = 1;
 		if (!(rtc->server_s = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
@@ -310,9 +312,7 @@ static void run_server(struct runtime_config *rtc)
 			err(EXIT_FAILURE, "unable to bind");
 		if (listen(rtc->server_s, SOMAXCONN))
 			err(EXIT_FAILURE, "unable to listen");
-#ifdef USE_SYSTEMD
 	}
-#endif
 	if (pthread_attr_init(&attr))
 		err(EXIT_FAILURE, "cannot init thread attribute");
 
@@ -471,7 +471,7 @@ int main(int argc, char **argv)
 #ifdef USE_SYSTEMD
 			puts(" with systemd support");
 #else
-			puts("");
+			putc('\n', stdout);
 #endif
 			return EXIT_SUCCESS;
 		case 'h':
@@ -509,6 +509,9 @@ int main(int argc, char **argv)
 		if (!(pidfd = fopen(pid_file, "r")))
 			err(EXIT_FAILURE, "cannot open pid file: %s", pid_file);
 		fscanf(pidfd, "%d", &pid);
+#ifndef USE_SYSTEMD
+		openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
+#endif
 		if (close_stream(pidfd))
 #ifdef USE_SYSTEMD
 			sd_journal_send("MESSAGE=close failed",
@@ -526,7 +529,6 @@ int main(int argc, char **argv)
 				err(EXIT_FAILURE, "sending signal failed");
 			}
 		}
-		openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 		eptr = getenv("USER");
 		if (eptr != NULL)
 #ifdef USE_SYSTEMD
@@ -545,6 +547,10 @@ int main(int argc, char **argv)
 #else
 			syslog(LOG_INFO, "signal was sent by SUDO_USER: %s", eptr);
 #endif
+#ifndef USE_SYSTEMD
+		closelog();
+#endif
+
 	}
 
 	if (server)
