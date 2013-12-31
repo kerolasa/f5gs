@@ -58,6 +58,7 @@
 #include "close-stream.h"
 #include "closeout.h"
 #include "progname.h"
+#include "xalloc.h"
 
 #ifdef USE_SYSTEMD
 # include "sd-daemon.h"
@@ -114,6 +115,7 @@ static void *handle_request(void *voidsocket)
 	char in_buf[IGNORE_BYTES];
 	struct timeval timeout;
 
+	pthread_detach(pthread_self());
 	pthread_rwlock_rdlock(&(rtc.lock));
 	send(sock, state_messages[rtc.msg_type], rtc.msg_len, 0);
 	pthread_rwlock_unlock(&(rtc.lock));
@@ -122,7 +124,7 @@ static void *handle_request(void *voidsocket)
 	timeout.tv_usec = 0;
 	if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed\n");
-	recv(sock, in_buf, IGNORE_BYTES, 0);
+	recv(sock, in_buf, sizeof(in_buf), 0);
 	close(sock);
 	free(voidsocket);
 	pthread_exit(NULL);
@@ -341,16 +343,13 @@ static void run_server(struct runtime_config *rtc)
 #endif
 
 	while (1) {
-		int accepted;
 		pthread_t thread;
 		int *newsock;
 
 		addr_len = sizeof(client_addr);
-		accepted = accept(rtc->server_s, (struct sockaddr *)&client_addr, &addr_len);
-		newsock = malloc(sizeof(int));
-		*newsock = accepted;
+		newsock = xmalloc(sizeof(int));
+		*newsock = accept(rtc->server_s, (struct sockaddr *)&client_addr, &addr_len);
 		pthread_create(&thread, NULL, handle_request, newsock);
-		pthread_detach(thread);
 	}
 }
 
