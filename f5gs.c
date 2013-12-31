@@ -402,9 +402,63 @@ static char *get_server_status(struct runtime_config *rtc)
 	return buf;
 }
 
+static int set_server_status(struct runtime_config *rtc)
+{
+	char *eptr;
+	pid_t pid;
+	FILE *pidfd;
+	char *pid_file = construct_pidfile(rtc);
+
+	if (!(pidfd = fopen(pid_file, "r")))
+		err(EXIT_FAILURE, "cannot open pid file: %s", pid_file);
+	fscanf(pidfd, "%d", &pid);
+#ifndef USE_SYSTEMD
+	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
+#endif
+	if (close_stream(pidfd))
+#ifdef USE_SYSTEMD
+		sd_journal_send("MESSAGE=close failed",
+				"PID_FILE=%s", pid_file,
+				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
+				"STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
+#else
+		syslog(LOG_ERR, "close failed: %s: %s", pid_file, strerror(errno));
+#endif
+	free(pid_file);
+	if (change_state(rtc, pid)) {
+		if (errno == 0)
+			warnx("execution of %s failed", F5GS_PRE);
+		else
+			warn("sending signal failed");
+		return EXIT_FAILURE;
+	}
+	eptr = getenv("USER");
+	if (eptr != NULL)
+#ifdef USE_SYSTEMD
+		sd_journal_send("MESSAGE=signal was sent",
+				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE),
+				"USER=%s", eptr, "PRIORITY=6", NULL);
+#else
+		syslog(LOG_INFO, "signal was sent by USER: %s", eptr);
+#endif
+	eptr = getenv("SUDO_USER");
+	if (eptr != NULL)
+#ifdef USE_SYSTEMD
+		sd_journal_send("MESSAGE=signal was sent",
+				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE),
+				"SUDO_USER=%s", eptr, "PRIORITY=6", NULL);
+#else
+		syslog(LOG_INFO, "signal was sent by SUDO_USER: %s", eptr);
+#endif
+#ifndef USE_SYSTEMD
+	closelog();
+#endif
+	return EXIT_SUCCESS;
+}
+
 int main(int argc, char **argv)
 {
-	int c, server = 0;
+	int c, server = 0, retval = EXIT_SUCCESS;
 	char *listen = NULL, *port = PORT_NUM;
 	struct addrinfo hints;
 	int e;
@@ -481,84 +535,32 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (signal(state_signals[STATE_DISABLE], catch_signals) == SIG_ERR ||
-	    signal(state_signals[STATE_MAINTENANCE], catch_signals) == SIG_ERR ||
-	    signal(state_signals[STATE_ENABLE], catch_signals) == SIG_ERR)
-		err(EXIT_FAILURE, "cannot set signal handler");
-
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 	e = getaddrinfo(listen, port, &hints, &(rtc.res));
-	if (e) {
-		warnx("getaddrinfo: %s port %s: %s", listen, port, gai_strerror(e));
-		exit(EXIT_FAILURE);
-	}
+	if (e)
+		errx(EXIT_FAILURE, "getaddrinfo: %s port %s: %s", listen, port, gai_strerror(e));
 
-	if (rtc.send_signal && server)
-		change_state(&rtc, getpid());
-	else if (server) {
-		rtc.msg_type = STATE_UNKNOWN;
-		rtc.msg_len = strlen(state_messages[STATE_UNKNOWN]);
-	} else if (rtc.send_signal) {
-		char *eptr;
-		pid_t pid;
-		FILE *pidfd;
-		char *pid_file = construct_pidfile(&rtc);
-		if (!(pidfd = fopen(pid_file, "r")))
-			err(EXIT_FAILURE, "cannot open pid file: %s", pid_file);
-		fscanf(pidfd, "%d", &pid);
-#ifndef USE_SYSTEMD
-		openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
-#endif
-		if (close_stream(pidfd))
-#ifdef USE_SYSTEMD
-			sd_journal_send("MESSAGE=close failed",
-					"PID_FILE=%s", pid_file,
-					"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
-					"STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
-#else
-			syslog(LOG_ERR, "close failed: %s: %s", pid_file, strerror(errno));
-#endif
-		free(pid_file);
-		if (change_state(&rtc, pid)) {
-			if (errno == 0) {
-				errx(EXIT_FAILURE, "execution of %s failed", F5GS_PRE);
-			} else {
-				err(EXIT_FAILURE, "sending signal failed");
-			}
+	if (server) {
+		if (signal(state_signals[STATE_DISABLE], catch_signals) == SIG_ERR ||
+		    signal(state_signals[STATE_MAINTENANCE], catch_signals) == SIG_ERR ||
+		    signal(state_signals[STATE_ENABLE], catch_signals) == SIG_ERR)
+			err(EXIT_FAILURE, "cannot set signal handler");
+
+		if (rtc.send_signal)
+			change_state(&rtc, getpid());
+		else {
+			rtc.msg_type = STATE_UNKNOWN;
+			rtc.msg_len = strlen(state_messages[STATE_UNKNOWN]);
 		}
-		eptr = getenv("USER");
-		if (eptr != NULL)
-#ifdef USE_SYSTEMD
-			sd_journal_send("MESSAGE=signal was sent",
-					"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE),
-					"USER=%s", eptr, "PRIORITY=6", NULL);
-#else
-			syslog(LOG_INFO, "signal was sent by USER: %s", eptr);
-#endif
-		eptr = getenv("SUDO_USER");
-		if (eptr != NULL)
-#ifdef USE_SYSTEMD
-			sd_journal_send("MESSAGE=signal was sent",
-					"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE),
-					"SUDO_USER=%s", eptr, "PRIORITY=6", NULL);
-#else
-			syslog(LOG_INFO, "signal was sent by SUDO_USER: %s", eptr);
-#endif
-#ifndef USE_SYSTEMD
-		closelog();
-#endif
-
-	}
-
-	if (server)
 		run_server(&rtc);
+	} else if (rtc.send_signal)
+		retval = set_server_status(&rtc);
 
 	printf("current status is: %s\n", get_server_status(&rtc));
-
 	freeaddrinfo(rtc.res);
 
-	return EXIT_SUCCESS;
+	return retval;
 }
