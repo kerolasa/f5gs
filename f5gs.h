@@ -41,6 +41,7 @@ struct runtime_config {
 	int msg_type;
 	size_t msg_len;
 	char *statedir;
+	char *pidfile;
 	char **argv;
 	int send_signal;
 	unsigned int run_scripts:1, run_foreground:1;

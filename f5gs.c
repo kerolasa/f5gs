@@ -158,19 +158,17 @@ static char *construct_pidfile(struct runtime_config *rtc)
 static int update_pid_file(struct runtime_config *rtc)
 {
 	FILE *fd;
-	char *pidfile;
 
 	if (access(rtc->statedir, W_OK))
 		if (mkdir(rtc->statedir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH))
 			return 1;
-	pidfile = construct_pidfile(rtc);
-	if (!(fd = fopen(pidfile, "w"))) {
+	if (!(fd = fopen(rtc->pidfile, "w"))) {
 #ifdef USE_SYSTEMD
 		sd_journal_send("MESSAGE=could not open file",
 				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
-				"PID_FILE=%s", pidfile, "STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
+				"PID_FILE=%s", rtc->pidfile, "STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
 #else
-		syslog(LOG_ERR, "could not open file: %s: %s", pidfile, strerror(errno));
+		syslog(LOG_ERR, "could not open file: %s: %s", rtc->pidfile, strerror(errno));
 #endif
 		return 1;
 	}
@@ -179,11 +177,10 @@ static int update_pid_file(struct runtime_config *rtc)
 #ifdef USE_SYSTEMD
 		sd_journal_send("MESSAGE=close failed",
 				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
-				"PID_FILE=%s", pidfile, "STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
+				"PID_FILE=%s", rtc->pidfile, "STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
 #else
-		syslog(LOG_ERR, "close failed: %s: %s", pidfile, strerror(errno));
+		syslog(LOG_ERR, "close failed: %s: %s", rtc->pidfile, strerror(errno));
 #endif
-	free(pidfile);
 	return 0;
 }
 
@@ -225,13 +222,11 @@ static void catch_signals(int signal)
 
 static void read_status_from_file(struct runtime_config *rtc)
 {
-	char *pid_file = construct_pidfile(rtc);
 	FILE *pidfd;
 	int ignored;
 
-	if (!(pidfd = fopen(pid_file, "r")))
+	if (!(pidfd = fopen(rtc->pidfile, "r")))
 		return;
-	free(pid_file);
 	fscanf(pidfd, "%d %d", &ignored, &(rtc->msg_type));
 	switch (rtc->msg_type) {
 	case STATE_DISABLE:
@@ -431,10 +426,9 @@ static int set_server_status(struct runtime_config *rtc)
 	char *eptr;
 	pid_t pid;
 	FILE *pidfd;
-	char *pid_file = construct_pidfile(rtc);
 
-	if (!(pidfd = fopen(pid_file, "r")))
-		err(EXIT_FAILURE, "cannot open pid file: %s", pid_file);
+	if (!(pidfd = fopen(rtc->pidfile, "r")))
+		err(EXIT_FAILURE, "cannot open pid file: %s", rtc->pidfile);
 	fscanf(pidfd, "%d", &pid);
 #ifndef USE_SYSTEMD
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
@@ -442,13 +436,12 @@ static int set_server_status(struct runtime_config *rtc)
 	if (close_stream(pidfd))
 #ifdef USE_SYSTEMD
 		sd_journal_send("MESSAGE=close failed",
-				"PID_FILE=%s", pid_file,
+				"PID_FILE=%s", rtc->pidfile,
 				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
 				"STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
 #else
-		syslog(LOG_ERR, "close failed: %s: %s", pid_file, strerror(errno));
+		syslog(LOG_ERR, "close failed: %s: %s", rtc->pidfile, strerror(errno));
 #endif
-	free(pid_file);
 	if (change_state(rtc, pid)) {
 		if (errno == 0)
 			warnx("execution of %s failed", F5GS_PRE);
@@ -566,6 +559,7 @@ int main(int argc, char **argv)
 	e = getaddrinfo(listen, port, &hints, &(rtc.res));
 	if (e)
 		errx(EXIT_FAILURE, "getaddrinfo: %s port %s: %s", listen, port, gai_strerror(e));
+	rtc.pidfile = construct_pidfile(&rtc);
 
 	if (server) {
 		if (rtc.send_signal) {
