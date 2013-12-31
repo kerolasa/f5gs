@@ -4,6 +4,7 @@ Conflicts=f5gs.service
 
 [Socket]
 ListenStream=@PORT_NUM@
+ReusePort=true
 
 [Install]
 WantedBy=sockets.target

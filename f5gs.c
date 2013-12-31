@@ -86,6 +86,7 @@ static void __attribute__ ((__noreturn__))
 	fprintf(out, " -p, --port <port>    health check tcp port (default: %s)\n", PORT_NUM);
 	fprintf(out, "     --state <dir>    path of the state dir (default: %s)\n", F5GS_RUNDIR);
 	fputs("     --no-scripts     do not run pre or post scripts\n", out);
+	fputs("     --foreground     do not run as daemon process\n", out);
 	fputs("\n", out);
 	fputs(" -h, --help           display this help and exit\n", out);
 	fputs(" -V, --version        output version information and exit\n", out);
@@ -318,7 +319,9 @@ static void run_server(struct runtime_config *rtc)
 	if (pthread_rwlock_init(&(rtc->lock), NULL))
 		err(EXIT_FAILURE, "cannot init read-write lock");
 
-	daemonize();
+	if (!rtc->run_foreground)
+		daemonize();
+
 	if (rtc->msg_type == STATE_UNKNOWN)
 		read_status_from_file(rtc);
 	if (update_pid_file(rtc))
@@ -331,6 +334,7 @@ static void run_server(struct runtime_config *rtc)
 	sd_journal_send("MESSAGE=service started",
 			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START),
 			"STATE=%s", state_messages[rtc->msg_type], "PRIORITY=6", NULL);
+	sd_notify(0, "READY=1");
 #else
 	syslog(LOG_INFO, "started in state %s", state_messages[rtc->msg_type]);
 #endif
@@ -406,7 +410,8 @@ int main(int argc, char **argv)
 	int e;
 	enum {
 		STATEDIR_OPT = CHAR_MAX + 1,
-		NO_SCRIPTS_OPT
+		NO_SCRIPTS_OPT,
+		FOREGROUND_OPT
 	};
 
 	static const struct option longopts[] = {
@@ -418,6 +423,7 @@ int main(int argc, char **argv)
 		{"port", required_argument, NULL, 'p'},
 		{"state", required_argument, NULL, STATEDIR_OPT},
 		{"no-scripts", no_argument, NULL, NO_SCRIPTS_OPT},
+		{"foreground", no_argument, NULL, FOREGROUND_OPT},
 		{"version", no_argument, NULL, 'V'},
 		{"help", no_argument, NULL, 'h'},
 		{NULL, 0, NULL, 0}
@@ -456,6 +462,9 @@ int main(int argc, char **argv)
 			break;
 		case NO_SCRIPTS_OPT:
 			rtc.run_scripts = 0;
+			break;
+		case FOREGROUND_OPT:
+			rtc.run_foreground = 1;
 			break;
 		case 'V':
 			printf("%s version %s", PACKAGE_NAME, PACKAGE_VERSION);

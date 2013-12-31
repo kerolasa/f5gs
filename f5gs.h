@@ -37,7 +37,8 @@ struct runtime_config {
 	char *statedir;
 	char **argv;
 	int send_signal;
-	unsigned int run_scripts:1;
+	unsigned int run_scripts:1,
+		     run_foreground:1;
 };
 
 #endif /* F5GS_HEADER_H */
