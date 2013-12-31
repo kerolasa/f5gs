@@ -69,6 +69,7 @@
 
 /* global variables */
 static struct runtime_config rtc;
+sigset_t set;
 
 /* keep functions in the order that allows skipping the function
  * definition lines */
@@ -193,8 +194,6 @@ static void catch_signals(int signal)
 		sd_journal_send("MESSAGE=could not get lock",
 				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
 				"STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
-#else
-		syslog(LOG_ERR, "could not get lock");
 #endif
 		return;
 	}
@@ -213,8 +212,8 @@ static void catch_signals(int signal)
 		abort();
 	}
 	rtc.msg_len = strlen(state_messages[rtc.msg_type]);
-	update_pid_file(&rtc);
 	pthread_rwlock_unlock(&(rtc.lock));
+	update_pid_file(&rtc);
 #ifdef USE_SYSTEMD
 	sd_journal_send("MESSAGE=signal received",
 			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE),
@@ -224,29 +223,27 @@ static void catch_signals(int signal)
 #endif
 }
 
-static int read_status_from_file(struct runtime_config *rtc)
+static void read_status_from_file(struct runtime_config *rtc)
 {
 	char *pid_file = construct_pidfile(rtc);
 	FILE *pidfd;
-	int ret;
+	int ignored;
 
 	if (!(pidfd = fopen(pid_file, "r")))
-		return 1;
+		return;
 	free(pid_file);
-	fscanf(pidfd, "%d %d", &ret, &(rtc->msg_type));
+	fscanf(pidfd, "%d %d", &ignored, &(rtc->msg_type));
 	switch (rtc->msg_type) {
 	case STATE_DISABLE:
 	case STATE_MAINTENANCE:
 	case STATE_ENABLE:
-		ret = 0;
+	case STATE_UNKNOWN:
 		break;
 	default:
 		rtc->msg_type = STATE_UNKNOWN;
-		ret = 1;
 	}
 	rtc->msg_len = strlen(state_messages[rtc->msg_type]);
 	fclose(pidfd);
-	return ret;
 }
 
 static void daemonize(void)
@@ -271,6 +268,34 @@ static void daemonize(void)
 		if (fd > STDERR_FILENO)
 			close(fd);
 	}
+}
+
+static void *signal_handler_thread(void *arg)
+{
+	sigset_t *set = arg;
+	int sig;
+
+	while (1) {
+		if (sigwait(set, &sig))
+			stop_server(0);
+		catch_signals(sig);
+	}
+	return NULL;
+}
+
+static void setup_signal_handling(void)
+{
+	pthread_t thread;
+
+	sigemptyset(&set);
+	sigaddset(&set, SIGUSR1);
+	sigaddset(&set, SIGUSR2);
+	sigaddset(&set, SIGWINCH);
+
+	if (pthread_sigmask(SIG_BLOCK, &set, NULL))
+		err(EXIT_FAILURE, "cannot set signal handler");
+	if (pthread_create(&thread, NULL, &signal_handler_thread, (void *)&set))
+		err(EXIT_FAILURE, "could not set start signal handler thread");
 }
 
 static void stop_server(int sig __attribute__ ((__unused__)))
@@ -325,14 +350,13 @@ static void run_server(struct runtime_config *rtc)
 	if (!rtc->run_foreground)
 		daemonize();
 
+	setup_signal_handling();
+
 	if (rtc->msg_type == STATE_UNKNOWN)
 		read_status_from_file(rtc);
-	if (update_pid_file(rtc))
-		faillog("cannot write pid file");
+		if (update_pid_file(rtc))
+			faillog("cannot write pid file");
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
-	signal(SIGHUP, stop_server);
-	signal(SIGINT, stop_server);
-	signal(SIGTERM, stop_server);
 #ifdef USE_SYSTEMD
 	sd_journal_send("MESSAGE=service started",
 			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START),
@@ -544,14 +568,12 @@ int main(int argc, char **argv)
 		errx(EXIT_FAILURE, "getaddrinfo: %s port %s: %s", listen, port, gai_strerror(e));
 
 	if (server) {
-		if (signal(state_signals[STATE_DISABLE], catch_signals) == SIG_ERR ||
-		    signal(state_signals[STATE_MAINTENANCE], catch_signals) == SIG_ERR ||
-		    signal(state_signals[STATE_ENABLE], catch_signals) == SIG_ERR)
-			err(EXIT_FAILURE, "cannot set signal handler");
-
-		if (rtc.send_signal)
-			change_state(&rtc, getpid());
-		else {
+		if (rtc.send_signal) {
+			rtc.msg_type = signal_state[rtc.send_signal];
+			rtc.msg_len = strlen(state_messages[rtc.msg_type]);
+			if (update_pid_file(&rtc))
+				err(EXIT_FAILURE, "cannot write pid file");
+		} else {
 			rtc.msg_type = STATE_UNKNOWN;
 			rtc.msg_len = strlen(state_messages[STATE_UNKNOWN]);
 		}
