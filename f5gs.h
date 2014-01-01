@@ -14,6 +14,13 @@ enum {
 	STATE_UNKNOWN
 };
 
+/* Remember to update manual page if you change signal(s). */
+enum {
+	SIG_DISABLE = SIGUSR1,
+	SIG_MAINTENANCE = SIGUSR2,
+	SIG_ENABLE = SIGHUP
+};
+
 /* Check get_server_status() is valid after changing message text(s). */
 static const char *state_messages[] = {
 	[STATE_DISABLE] = "disable",
@@ -23,15 +30,15 @@ static const char *state_messages[] = {
 };
 
 static const int state_signals[] = {
-	[STATE_DISABLE] = SIGUSR1,
-	[STATE_MAINTENANCE] = SIGUSR2,
-	[STATE_ENABLE] = SIGWINCH
+	[STATE_DISABLE] = SIG_DISABLE,
+	[STATE_MAINTENANCE] = SIG_MAINTENANCE,
+	[STATE_ENABLE] = SIG_ENABLE
 };
 
 static const int signal_state[] = {
-	[SIGUSR1] = STATE_DISABLE,
-	[SIGUSR2] = STATE_MAINTENANCE,
-	[SIGWINCH] = STATE_ENABLE
+	[SIG_DISABLE] = STATE_DISABLE,
+	[SIG_MAINTENANCE] = STATE_MAINTENANCE,
+	[SIG_ENABLE] = STATE_ENABLE
 };
 
 struct runtime_config {

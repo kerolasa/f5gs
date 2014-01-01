@@ -63,7 +63,7 @@ achieved by sending SIGUSR2 to the daemon.
 .TP
 \fB\-e\fR, \fB\-\-enable\fR
 Enable health check.  This will set the service to normal operational state,
-Same can be achieved by sending SIGWINCH to the daemon.
+Same can be achieved by sending SIGHUP to the daemon.
 .TP
 \fB\-s\fR, \fB\-\-server\fR
 Start the health check daemon.  The daemon tries to find old service

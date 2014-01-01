@@ -196,13 +196,13 @@ static void catch_signals(int signal)
 		return;
 	}
 	switch (signal) {
-	case SIGUSR1:
+	case SIG_DISABLE:
 		rtc.msg_type = STATE_DISABLE;
 		break;
-	case SIGUSR2:
+	case SIG_MAINTENANCE:
 		rtc.msg_type = STATE_MAINTENANCE;
 		break;
-	case SIGWINCH:
+	case SIG_ENABLE:
 		rtc.msg_type = STATE_ENABLE;
 		break;
 	default:
@@ -274,7 +274,16 @@ static void *signal_handler_thread(void *arg)
 	while (1) {
 		if (sigwait(set, &sig))
 			stop_server(0);
-		catch_signals(sig);
+		switch (sig) {
+		case SIG_DISABLE:
+		case SIG_MAINTENANCE:
+		case SIG_ENABLE:
+			catch_signals(sig);
+			break;
+		default:
+			printf("got stop\n");
+			stop_server(0);
+		}
 	}
 	return NULL;
 }
@@ -284,9 +293,12 @@ static void setup_signal_handling(void)
 	pthread_t thread;
 
 	sigemptyset(&set);
-	sigaddset(&set, SIGUSR1);
-	sigaddset(&set, SIGUSR2);
-	sigaddset(&set, SIGWINCH);
+	sigaddset(&set, SIG_DISABLE);
+	sigaddset(&set, SIG_MAINTENANCE);
+	sigaddset(&set, SIG_ENABLE);
+
+	sigaddset(&set, SIGINT);
+	sigaddset(&set, SIGTERM);
 
 	if (pthread_sigmask(SIG_BLOCK, &set, NULL))
 		err(EXIT_FAILURE, "cannot set signal handler");
