@@ -110,7 +110,8 @@ static void __attribute__ ((__noreturn__))
 	exit(EXIT_FAILURE);
 }
 
-static void *handle_request(void *voidsocket)
+static void __attribute__ ((__noreturn__))
+    *handle_request(void *voidsocket)
 {
 	int sock = *(int *)voidsocket;
 	char in_buf[IGNORE_BYTES];
@@ -293,7 +294,8 @@ static void setup_signal_handling(void)
 		err(EXIT_FAILURE, "could not set start signal handler thread");
 }
 
-static void stop_server(int sig __attribute__ ((__unused__)))
+static void __attribute__ ((__noreturn__))
+    stop_server(int sig __attribute__ ((__unused__)))
 {
 	pthread_rwlock_destroy(&(rtc.lock));
 	freeaddrinfo(rtc.res);
