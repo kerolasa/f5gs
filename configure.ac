@@ -57,8 +57,14 @@ AC_ARG_ENABLE([systemd],
 )
 AM_CONDITIONAL([USE_SYSTEMD], [test "x$enable_systemd" = xyes])
 AS_IF([test "x$enable_systemd" = xyes], [
-	PKG_CHECK_MODULES([JOURNAL], [libsystemd-journal])
-	AC_DEFINE([USE_SYSTEMD], [1], [use systemd socket activation])
+	PKG_CHECK_MODULES([SYSTEMD_DAEMON], [libsystemd-daemon], [], [
+		AC_MSG_ERROR([cannot find libsystemd-daemon support])
+	])
+	PKG_CHECK_MODULES([SYSTEMD_JOURNAL], [libsystemd-journal], [
+		AC_DEFINE([USE_SYSTEMD], [1], [use systemd socket activation])
+	], [
+		AC_MSG_ERROR([cannot find libsystemd-journal support])
+	])
 ])
 
 AC_ARG_WITH([systemdsystemunitdir],

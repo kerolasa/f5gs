@@ -61,8 +61,8 @@
 #include "xalloc.h"
 
 #ifdef USE_SYSTEMD
-# include "sd-daemon.h"
-# include "sd-journal.h"
+# include <systemd/sd-daemon.h>
+# include <systemd/sd-journal.h>
 #endif
 
 #include "f5gs.h"

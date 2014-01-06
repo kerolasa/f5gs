@@ -24,13 +24,9 @@ f5gs_LDADD = \
 	$(LTLIBINTL)
 
 if USE_SYSTEMD
-f5gs_SOURCES += \
-	sd-daemon.c \
-	sd-daemon.h \
-	sd-journal.h
-
-f5gs_LDADD += -lrt \
-	$(JOURNAL_LIBS)
+f5gs_LDADD += \
+	$(SYSTEMD_DAEMON_LIBS) \
+	$(SYSTEMD_JOURNAL_LIBS)
 endif
 
 edit = sed \
