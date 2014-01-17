@@ -270,6 +270,7 @@ static void *signal_handler_thread(void *arg)
 {
 	sigset_t *set = arg;
 	int sig;
+	int errsave = errno;
 
 	while (1) {
 		if (sigwait(set, &sig))
@@ -285,6 +286,7 @@ static void *signal_handler_thread(void *arg)
 			stop_server(0);
 		}
 	}
+	errno = errsave;
 	return NULL;
 }
 
