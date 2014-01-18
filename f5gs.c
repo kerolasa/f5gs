@@ -119,7 +119,7 @@ static void __attribute__ ((__noreturn__))
 
 	pthread_detach(pthread_self());
 	pthread_rwlock_rdlock(&(rtc.lock));
-	send(sock, state_messages[rtc.msg_type], rtc.msg_len, 0);
+	send(sock, state_message[rtc.state_code], rtc.message_lenght, 0);
 	pthread_rwlock_unlock(&(rtc.lock));
 	/* let the client send, and ignore */
 	timeout.tv_sec = 1;
@@ -132,7 +132,7 @@ static void __attribute__ ((__noreturn__))
 	pthread_exit(NULL);
 }
 
-static char *construct_pidfile(struct runtime_config *rtc)
+static char *construct_pid_file(struct runtime_config *rtc)
 {
 	char *path;
 	void *p;
@@ -149,7 +149,7 @@ static char *construct_pidfile(struct runtime_config *rtc)
 		break;
 	}
 	inet_ntop(rtc->res->ai_family, p, s, sizeof(s));
-	ret = asprintf(&path, "%s/%s:%d", rtc->statedir, s,
+	ret = asprintf(&path, "%s/%s:%d", rtc->state_dir, s,
 		       ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
 	if (ret < 0)
 		faillog("cannot allocate memory");
@@ -160,27 +160,27 @@ static int update_pid_file(struct runtime_config *rtc)
 {
 	FILE *fd;
 
-	if (access(rtc->statedir, W_OK))
-		if (mkdir(rtc->statedir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH))
+	if (access(rtc->state_dir, W_OK))
+		if (mkdir(rtc->state_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH))
 			return 1;
-	if (!(fd = fopen(rtc->pidfile, "w"))) {
+	if (!(fd = fopen(rtc->pid_file, "w"))) {
 #ifdef USE_SYSTEMD
 		sd_journal_send("MESSAGE=could not open file",
 				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
-				"PID_FILE=%s", rtc->pidfile, "STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
+				"PID_FILE=%s", rtc->pid_file, "STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
 #else
-		syslog(LOG_ERR, "could not open file: %s: %s", rtc->pidfile, strerror(errno));
+		syslog(LOG_ERR, "could not open file: %s: %s", rtc->pid_file, strerror(errno));
 #endif
 		return 1;
 	}
-	fprintf(fd, "%u %d", getpid(), rtc->msg_type);
+	fprintf(fd, "%u %d", getpid(), rtc->state_code);
 	if (close_stream(fd))
 #ifdef USE_SYSTEMD
 		sd_journal_send("MESSAGE=close failed",
 				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
-				"PID_FILE=%s", rtc->pidfile, "STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
+				"PID_FILE=%s", rtc->pid_file, "STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
 #else
-		syslog(LOG_ERR, "close failed: %s: %s", rtc->pidfile, strerror(errno));
+		syslog(LOG_ERR, "close failed: %s: %s", rtc->pid_file, strerror(errno));
 #endif
 	return 0;
 }
@@ -197,27 +197,27 @@ static void catch_signals(int signal)
 	}
 	switch (signal) {
 	case SIG_DISABLE:
-		rtc.msg_type = STATE_DISABLE;
+		rtc.state_code = STATE_DISABLE;
 		break;
 	case SIG_MAINTENANCE:
-		rtc.msg_type = STATE_MAINTENANCE;
+		rtc.state_code = STATE_MAINTENANCE;
 		break;
 	case SIG_ENABLE:
-		rtc.msg_type = STATE_ENABLE;
+		rtc.state_code = STATE_ENABLE;
 		break;
 	default:
 		/* should be impossible to reach */
 		abort();
 	}
-	rtc.msg_len = strlen(state_messages[rtc.msg_type]);
+	rtc.message_lenght = strlen(state_message[rtc.state_code]);
 	pthread_rwlock_unlock(&(rtc.lock));
 	update_pid_file(&rtc);
 #ifdef USE_SYSTEMD
 	sd_journal_send("MESSAGE=signal received",
 			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE),
-			"NEW_STATE=%s", state_messages[rtc.msg_type], "PRIORITY=6", NULL);
+			"NEW_STATE=%s", state_message[rtc.state_code], "PRIORITY=6", NULL);
 #else
-	syslog(LOG_INFO, "signal received, state is %s", state_messages[rtc.msg_type]);
+	syslog(LOG_INFO, "signal received, state is %s", state_message[rtc.state_code]);
 #endif
 }
 
@@ -226,19 +226,19 @@ static void read_status_from_file(struct runtime_config *rtc)
 	FILE *pidfd;
 	int ignored;
 
-	if (!(pidfd = fopen(rtc->pidfile, "r")))
+	if (!(pidfd = fopen(rtc->pid_file, "r")))
 		return;
-	fscanf(pidfd, "%d %d", &ignored, &(rtc->msg_type));
-	switch (rtc->msg_type) {
+	fscanf(pidfd, "%d %d", &ignored, &(rtc->state_code));
+	switch (rtc->state_code) {
 	case STATE_DISABLE:
 	case STATE_MAINTENANCE:
 	case STATE_ENABLE:
 	case STATE_UNKNOWN:
 		break;
 	default:
-		rtc->msg_type = STATE_UNKNOWN;
+		rtc->state_code = STATE_UNKNOWN;
 	}
-	rtc->msg_len = strlen(state_messages[rtc->msg_type]);
+	rtc->message_lenght = strlen(state_message[rtc->state_code]);
 	fclose(pidfd);
 }
 
@@ -282,7 +282,6 @@ static void *signal_handler_thread(void *arg)
 			catch_signals(sig);
 			break;
 		default:
-			printf("got stop\n");
 			stop_server(0);
 		}
 	}
@@ -294,7 +293,7 @@ static void setup_signal_handling(void)
 {
 	pthread_t thread;
 
-	sigemptyset(&set);
+	sigemptyset(&set);	/* sigset_t set is global variable. */
 	sigaddset(&set, SIG_DISABLE);
 	sigaddset(&set, SIG_MAINTENANCE);
 	sigaddset(&set, SIG_ENABLE);
@@ -313,7 +312,7 @@ static void __attribute__ ((__noreturn__))
 {
 	pthread_rwlock_destroy(&(rtc.lock));
 	freeaddrinfo(rtc.res);
-	close(rtc.server_s);
+	close(rtc.server_socket);
 
 #ifdef USE_SYSTEMD
 	sd_journal_send("MESSAGE=service stopped", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START),
@@ -337,19 +336,19 @@ static void run_server(struct runtime_config *rtc)
 	if (1 < ret)
 		faillog("no or too many file descriptors received");
 	else if (ret == 1)
-		rtc->server_s = SD_LISTEN_FDS_START + 0;
+		rtc->server_socket = SD_LISTEN_FDS_START + 0;
 	else {
 #else
 	{
 #endif
 		int on = 1;
-		if (!(rtc->server_s = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
+		if (!(rtc->server_socket = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
 			err(EXIT_FAILURE, "cannot create socket");
-		if (setsockopt(rtc->server_s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
+		if (setsockopt(rtc->server_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
 			err(EXIT_FAILURE, "cannot set socket options");
-		if (bind(rtc->server_s, rtc->res->ai_addr, rtc->res->ai_addrlen))
+		if (bind(rtc->server_socket, rtc->res->ai_addr, rtc->res->ai_addrlen))
 			err(EXIT_FAILURE, "unable to bind");
-		if (listen(rtc->server_s, SOMAXCONN))
+		if (listen(rtc->server_socket, SOMAXCONN))
 			err(EXIT_FAILURE, "unable to listen");
 	}
 	if (pthread_attr_init(&attr))
@@ -363,28 +362,28 @@ static void run_server(struct runtime_config *rtc)
 
 	setup_signal_handling();
 
-	if (rtc->msg_type == STATE_UNKNOWN)
+	if (rtc->state_code == STATE_UNKNOWN)
 		read_status_from_file(rtc);
-		if (update_pid_file(rtc))
-			faillog("cannot write pid file");
+	if (update_pid_file(rtc))
+		faillog("cannot write pid file");
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 #ifdef USE_SYSTEMD
 	sd_journal_send("MESSAGE=service started",
 			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START),
-			"STATE=%s", state_messages[rtc->msg_type], "PRIORITY=6", NULL);
+			"STATE=%s", state_message[rtc->state_code], "PRIORITY=6", NULL);
 	sd_notify(0, "READY=1");
 #else
-	syslog(LOG_INFO, "started in state %s", state_messages[rtc->msg_type]);
+	syslog(LOG_INFO, "started in state %s", state_message[rtc->state_code]);
 #endif
 
 	while (1) {
 		pthread_t thread;
-		int *newsock;
+		int *new_socket;
 
 		addr_len = sizeof(client_addr);
-		newsock = xmalloc(sizeof(int));
-		*newsock = accept(rtc->server_s, (struct sockaddr *)&client_addr, &addr_len);
-		pthread_create(&thread, NULL, handle_request, newsock);
+		new_socket = xmalloc(sizeof(int));
+		*new_socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len);
+		pthread_create(&thread, NULL, handle_request, new_socket);
 	}
 }
 
@@ -416,11 +415,11 @@ static int run_script(struct runtime_config *rtc, char *script)
 static int change_state(struct runtime_config *rtc, pid_t pid)
 {
 	int ret = 0;
-	if (rtc->run_scripts && !access(F5GS_PRE, X_OK))
+	if (!(rtc->no_scripts) && !access(F5GS_PRE, X_OK))
 		ret = run_script(rtc, F5GS_PRE);
 	if (!ret)
-		ret = kill(pid, rtc->send_signal);
-	if (rtc->run_scripts && !ret && !access(F5GS_POST, X_OK))
+		ret = kill(pid, rtc->client_signal);
+	if (!(rtc->no_scripts) && !ret && !access(F5GS_POST, X_OK))
 		ret = run_script(rtc, F5GS_POST);
 	return ret;
 }
@@ -429,6 +428,7 @@ static char *get_server_status(struct runtime_config *rtc)
 {
 	int sfd;
 	static char buf[12] = { 0 };	/* 'maintenance' is the longest reply. */
+
 	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
 		err(EXIT_FAILURE, "cannot create socket");
 	if (connect(sfd, rtc->res->ai_addr, rtc->res->ai_addrlen))
@@ -443,8 +443,8 @@ static int set_server_status(struct runtime_config *rtc)
 	pid_t pid;
 	FILE *pidfd;
 
-	if (!(pidfd = fopen(rtc->pidfile, "r")))
-		err(EXIT_FAILURE, "cannot open pid file: %s", rtc->pidfile);
+	if (!(pidfd = fopen(rtc->pid_file, "r")))
+		err(EXIT_FAILURE, "cannot open pid file: %s", rtc->pid_file);
 	fscanf(pidfd, "%d", &pid);
 #ifndef USE_SYSTEMD
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
@@ -452,11 +452,11 @@ static int set_server_status(struct runtime_config *rtc)
 	if (close_stream(pidfd))
 #ifdef USE_SYSTEMD
 		sd_journal_send("MESSAGE=close failed",
-				"PID_FILE=%s", rtc->pidfile,
+				"PID_FILE=%s", rtc->pid_file,
 				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
 				"STRERROR=%s", strerror(errno), "PRIORITY=3", NULL);
 #else
-		syslog(LOG_ERR, "close failed: %s: %s", rtc->pidfile, strerror(errno));
+		syslog(LOG_ERR, "close failed: %s: %s", rtc->pid_file, strerror(errno));
 #endif
 	if (change_state(rtc, pid)) {
 		if (errno == 0)
@@ -521,19 +521,18 @@ int main(int argc, char **argv)
 
 	memset(&rtc, 0, sizeof(struct runtime_config));
 	rtc.argv = argv;
-	rtc.statedir = F5GS_RUNDIR;
-	rtc.run_scripts = 1;
+	rtc.state_dir = F5GS_RUNDIR;
 
 	while ((c = getopt_long(argc, argv, "dmesl:p:Vh", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
-			rtc.send_signal = state_signals[STATE_DISABLE];
+			rtc.client_signal = state_signal[STATE_DISABLE];
 			break;
 		case 'm':
-			rtc.send_signal = state_signals[STATE_MAINTENANCE];
+			rtc.client_signal = state_signal[STATE_MAINTENANCE];
 			break;
 		case 'e':
-			rtc.send_signal = state_signals[STATE_ENABLE];
+			rtc.client_signal = state_signal[STATE_ENABLE];
 			break;
 		case 's':
 			server = 1;
@@ -545,10 +544,10 @@ int main(int argc, char **argv)
 			port = optarg;
 			break;
 		case STATEDIR_OPT:
-			rtc.statedir = optarg;
+			rtc.state_dir = optarg;
 			break;
 		case NO_SCRIPTS_OPT:
-			rtc.run_scripts = 0;
+			rtc.no_scripts = 1;
 			break;
 		case FOREGROUND_OPT:
 			rtc.run_foreground = 1;
@@ -575,20 +574,20 @@ int main(int argc, char **argv)
 	e = getaddrinfo(listen, port, &hints, &(rtc.res));
 	if (e)
 		errx(EXIT_FAILURE, "getaddrinfo: %s port %s: %s", listen, port, gai_strerror(e));
-	rtc.pidfile = construct_pidfile(&rtc);
+	rtc.pid_file = construct_pid_file(&rtc);
 
 	if (server) {
-		if (rtc.send_signal) {
-			rtc.msg_type = signal_state[rtc.send_signal];
-			rtc.msg_len = strlen(state_messages[rtc.msg_type]);
+		if (rtc.client_signal) {
+			rtc.state_code = signal_state[rtc.client_signal];
+			rtc.message_lenght = strlen(state_message[rtc.state_code]);
 			if (update_pid_file(&rtc))
 				err(EXIT_FAILURE, "cannot write pid file");
 		} else {
-			rtc.msg_type = STATE_UNKNOWN;
-			rtc.msg_len = strlen(state_messages[STATE_UNKNOWN]);
+			rtc.state_code = STATE_UNKNOWN;
+			rtc.message_lenght = strlen(state_message[STATE_UNKNOWN]);
 		}
 		run_server(&rtc);
-	} else if (rtc.send_signal)
+	} else if (rtc.client_signal)
 		retval = set_server_status(&rtc);
 
 	printf("current status is: %s\n", get_server_status(&rtc));

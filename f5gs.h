@@ -22,14 +22,14 @@ enum {
 };
 
 /* Check get_server_status() is valid after changing message text(s). */
-static const char *state_messages[] = {
+static const char *state_message[] = {
 	[STATE_DISABLE] = "disable",
 	[STATE_MAINTENANCE] = "maintenance",
 	[STATE_ENABLE] = "enable",
 	[STATE_UNKNOWN] = "unknown"
 };
 
-static const int state_signals[] = {
+static const int state_signal[] = {
 	[STATE_DISABLE] = SIG_DISABLE,
 	[STATE_MAINTENANCE] = SIG_MAINTENANCE,
 	[STATE_ENABLE] = SIG_ENABLE
@@ -43,21 +43,22 @@ static const int signal_state[] = {
 
 struct runtime_config {
 	struct addrinfo *res;
-	int server_s;
+	int server_socket;
 	pthread_rwlock_t lock;
-	int msg_type;
-	size_t msg_len;
-	char *statedir;
-	char *pidfile;
+	int state_code;
+	size_t message_lenght;
+	char *state_dir;
+	char *pid_file;
 	char **argv;
-	int send_signal;
-	unsigned int run_scripts:1, run_foreground:1;
+	int client_signal;
+	unsigned int no_scripts:1,
+		     run_foreground:1;
 };
 
 static void __attribute__ ((__noreturn__)) usage(FILE *out);
 static void __attribute__ ((__noreturn__)) faillog(char *msg);
 static void *handle_request(void *voidsocket);
-static char *construct_pidfile(struct runtime_config *rtc);
+static char *construct_pid_file(struct runtime_config *rtc);
 static int update_pid_file(struct runtime_config *rtc);
 static void catch_signals(int signal);
 static void read_status_from_file(struct runtime_config *rtc);
