@@ -1,3 +1,16 @@
+2014-01-18
+	Release v0.3.  This release adds support to systemd and makes
+	messaging to use journald when they are available.  Various
+	threading and signaling issues are fixed.  The contrib directory
+	has an example to puppet management of the f5gs, and a script
+	demonstrating how to perform pre-state change actions.  Some of
+	the changes make the command performance to be better, while
+	other ensure the daemon is very difficult to knock out with
+	(d)dos.  The making of abuse hard meant fixing all resource
+	leaks.
+
+	IMHO the software has production quality.
+
 2013-10-22
 	Release v0.2 that makes the utility to behave like a reasonable
 	daemon.  It also includes manual page, autotools setup with
