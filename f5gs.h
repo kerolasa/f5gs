@@ -24,7 +24,6 @@ enum {
 	SIG_DISABLE = SIGUSR2
 };
 
-/* Check get_server_status() is valid after changing message text(s). */
 static const char *state_message[] = {
 	[STATE_ENABLE] = "enable",
 	[STATE_MAINTENANCE] = "maintenance",

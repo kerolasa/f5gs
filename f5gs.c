@@ -432,7 +432,7 @@ static int change_state(struct runtime_config *rtc, pid_t pid)
 static char *get_server_status(struct runtime_config *rtc)
 {
 	int sfd;
-	static char buf[12] = { 0 };	/* 'maintenance' is the longest reply. */
+	static char buf[sizeof(state_message)] = { 0 };
 
 	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol))) {
 		if (rtc->quiet)
@@ -446,7 +446,7 @@ static char *get_server_status(struct runtime_config *rtc)
 		else
 			err(EXIT_FAILURE, "cannot connect");
 	}
-	read(sfd, buf, 12);
+	read(sfd, buf, sizeof(state_message));
 	return buf;
 }
 
