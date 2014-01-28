@@ -174,7 +174,7 @@ static int update_pid_file(struct runtime_config *rtc)
 #endif
 		return 1;
 	}
-	fprintf(fd, "%u %d", getpid(), rtc->state_code);
+	fprintf(fd, "%u %d %d", getpid(), rtc->state_code, STATE_FILE_VERSION);
 	if (close_stream(fd))
 #ifdef USE_SYSTEMD
 		sd_journal_send("MESSAGE=close failed",
@@ -225,11 +225,14 @@ static void catch_signals(int signal)
 static void read_status_from_file(struct runtime_config *rtc)
 {
 	FILE *pidfd;
-	int ignored;
+	int ignored, version;
 
 	if (!(pidfd = fopen(rtc->pid_file, "r")))
 		return;
-	fscanf(pidfd, "%d %d", &ignored, &(rtc->state_code));
+	if (fscanf(pidfd, "%d %d %d", &ignored, &(rtc->state_code), &version) != 3)
+		goto err;
+	if (version != STATE_FILE_VERSION)
+		goto err;
 	switch (rtc->state_code) {
 	case STATE_DISABLE:
 	case STATE_MAINTENANCE:
@@ -237,6 +240,7 @@ static void read_status_from_file(struct runtime_config *rtc)
 	case STATE_UNKNOWN:
 		break;
 	default:
+ err:
 		rtc->state_code = STATE_UNKNOWN;
 	}
 	rtc->message_lenght = strlen(state_message[rtc->state_code]);
