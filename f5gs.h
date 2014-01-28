@@ -7,38 +7,39 @@
 # define MESSAGE_STATE_CHANGE	SD_ID128_MAKE(74,60,5f,27,15,d3,4b,01,8a,2c,61,c3,7a,99,4c,7b)
 # define MESSAGE_STOP_START	SD_ID128_MAKE(f5,eb,95,b2,81,7e,46,69,a8,cc,40,ea,83,94,11,b3)
 
+/* Remember to update manual page if you change --quiet return value(s). */
 enum {
-	STATE_DISABLE,
+	STATE_ENABLE = 0,
 	STATE_MAINTENANCE,
-	STATE_ENABLE,
+	STATE_DISABLE,
 	STATE_UNKNOWN
 };
 
 /* Remember to update manual page if you change signal(s). */
 enum {
-	SIG_DISABLE = SIGUSR1,
-	SIG_MAINTENANCE = SIGUSR2,
-	SIG_ENABLE = SIGHUP
+	SIG_ENABLE = SIGHUP,
+	SIG_MAINTENANCE = SIGUSR1,
+	SIG_DISABLE = SIGUSR2
 };
 
 /* Check get_server_status() is valid after changing message text(s). */
 static const char *state_message[] = {
-	[STATE_DISABLE] = "disable",
-	[STATE_MAINTENANCE] = "maintenance",
 	[STATE_ENABLE] = "enable",
+	[STATE_MAINTENANCE] = "maintenance",
+	[STATE_DISABLE] = "disable",
 	[STATE_UNKNOWN] = "unknown"
 };
 
 static const int state_signal[] = {
-	[STATE_DISABLE] = SIG_DISABLE,
+	[STATE_ENABLE] = SIG_ENABLE,
 	[STATE_MAINTENANCE] = SIG_MAINTENANCE,
-	[STATE_ENABLE] = SIG_ENABLE
+	[STATE_DISABLE] = SIG_DISABLE
 };
 
 static const int signal_state[] = {
-	[SIG_DISABLE] = STATE_DISABLE,
+	[SIG_ENABLE] = STATE_ENABLE,
 	[SIG_MAINTENANCE] = STATE_MAINTENANCE,
-	[SIG_ENABLE] = STATE_ENABLE
+	[SIG_DISABLE] = STATE_DISABLE
 };
 
 struct runtime_config {
@@ -52,7 +53,8 @@ struct runtime_config {
 	char **argv;
 	int client_signal;
 	unsigned int no_scripts:1,
-		     run_foreground:1;
+		     run_foreground:1,
+		     quiet:1;
 };
 
 static void __attribute__ ((__noreturn__)) usage(FILE *out);

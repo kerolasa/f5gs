@@ -93,6 +93,28 @@ Relocate the command
 to elsewhere from
 .IR @f5gs_rundir@ .
 .TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Do not print anything, but inform with an exit value below what is the
+state.  This option is applicable only when running in client mode, and
+is meant to be used in scripts.
+.PP
+.RS
+.PD 0
+.TP
+.B 0
+enable
+.TP
+.B 1
+maintenance
+.TP
+.B 2
+disable
+.TP
+.B 3
+unknown, or an error while determining the state such as f5gs server not running
+.PD
+.RE
+.TP
 \fB\-V\fR, \fB\-\-version\fR
 Display version information, and what compile modules are in use, and
 exit.

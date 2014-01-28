@@ -87,6 +87,7 @@ static void __attribute__ ((__noreturn__))
 	fputs(" -l, --listen <addr>  ip address daemon will listen\n", out);
 	fprintf(out, " -p, --port <port>    health check tcp port (default: %s)\n", PORT_NUM);
 	fprintf(out, "     --state <dir>    path of the state dir (default: %s)\n", F5GS_RUNDIR);
+	fputs(" -q, --quiet          do not print status, use exit values for states\n", out);
 	fputs("     --no-scripts     do not run pre or post scripts\n", out);
 	fputs("     --foreground     do not run as daemon process\n", out);
 	fputs("\n", out);
@@ -429,10 +430,18 @@ static char *get_server_status(struct runtime_config *rtc)
 	int sfd;
 	static char buf[12] = { 0 };	/* 'maintenance' is the longest reply. */
 
-	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
-		err(EXIT_FAILURE, "cannot create socket");
-	if (connect(sfd, rtc->res->ai_addr, rtc->res->ai_addrlen))
-		err(EXIT_FAILURE, "cannot connect");
+	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol))) {
+		if (rtc->quiet)
+			exit(STATE_UNKNOWN);
+		else
+			err(EXIT_FAILURE, "cannot create socket");
+	}
+	if (connect(sfd, rtc->res->ai_addr, rtc->res->ai_addrlen)) {
+		if (rtc->quiet)
+			exit(STATE_UNKNOWN);
+		else
+			err(EXIT_FAILURE, "cannot connect");
+	}
 	read(sfd, buf, 12);
 	return buf;
 }
@@ -509,6 +518,7 @@ int main(int argc, char **argv)
 		{"listen", required_argument, NULL, 'l'},
 		{"port", required_argument, NULL, 'p'},
 		{"state", required_argument, NULL, STATEDIR_OPT},
+		{"quiet", no_argument, NULL, 'q'},
 		{"no-scripts", no_argument, NULL, NO_SCRIPTS_OPT},
 		{"foreground", no_argument, NULL, FOREGROUND_OPT},
 		{"version", no_argument, NULL, 'V'},
@@ -523,7 +533,7 @@ int main(int argc, char **argv)
 	rtc.argv = argv;
 	rtc.state_dir = F5GS_RUNDIR;
 
-	while ((c = getopt_long(argc, argv, "dmesl:p:Vh", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "dmesl:p:qVh", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
 			rtc.client_signal = state_signal[STATE_DISABLE];
@@ -546,6 +556,8 @@ int main(int argc, char **argv)
 		case STATEDIR_OPT:
 			rtc.state_dir = optarg;
 			break;
+		case 'q':
+			rtc.quiet = 1;
 		case NO_SCRIPTS_OPT:
 			rtc.no_scripts = 1;
 			break;
@@ -572,8 +584,12 @@ int main(int argc, char **argv)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 	e = getaddrinfo(listen, port, &hints, &(rtc.res));
-	if (e)
-		errx(EXIT_FAILURE, "getaddrinfo: %s port %s: %s", listen, port, gai_strerror(e));
+	if (e) {
+		if (rtc.quiet)
+			exit(STATE_UNKNOWN);
+		else
+			errx(EXIT_FAILURE, "getaddrinfo: %s port %s: %s", listen, port, gai_strerror(e));
+	}
 	rtc.pid_file = construct_pid_file(&rtc);
 
 	if (server) {
@@ -590,7 +606,17 @@ int main(int argc, char **argv)
 	} else if (rtc.client_signal)
 		retval = set_server_status(&rtc);
 
-	printf("current status is: %s\n", get_server_status(&rtc));
+	if (rtc.quiet) {
+		char *s;
+		int i;
+
+		s = get_server_status(&rtc);
+		for (i = 0; i <= STATE_UNKNOWN; i++)
+			if (!strcmp(s, state_message[i]))
+				break;
+		retval = i;
+	} else
+		printf("current status is: %s\n", get_server_status(&rtc));
 	freeaddrinfo(rtc.res);
 
 	return retval;
