@@ -1,13 +1,15 @@
 #ifndef F5GS_HEADER_H
 # define F5GS_HEADER_H
 
-# define IGNORE_BYTES		256
 
 # define MESSAGE_ERROR		SD_ID128_MAKE(e7,23,7d,b8,48,ae,40,91,b5,ce,09,b2,eb,b7,59,44)
 # define MESSAGE_STATE_CHANGE	SD_ID128_MAKE(74,60,5f,27,15,d3,4b,01,8a,2c,61,c3,7a,99,4c,7b)
 # define MESSAGE_STOP_START	SD_ID128_MAKE(f5,eb,95,b2,81,7e,46,69,a8,cc,40,ea,83,94,11,b3)
 
-enum { STATE_FILE_VERSION = 0 };
+enum {
+	STATE_FILE_VERSION = 0,
+	IGNORE_BYTES = 256
+};
 
 /* Remember to update manual page if you change --quiet return value(s). */
 enum {
