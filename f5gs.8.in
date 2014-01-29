@@ -115,6 +115,14 @@ unknown, or an error while determining the state such as f5gs server not running
 .PD
 .RE
 .TP
+\fB\-\-no\-scripts\fR
+Skip running pre or post scripts at state change.
+.TP
+\fB\-\-foreground\fR
+Run server process in foreground with result an operator can see error
+messages from terminal rather than syslog or journal.  This option is
+useful only when debugging.
+.TP
 \fB\-V\fR, \fB\-\-version\fR
 Display version information, and what compile modules are in use, and
 exit.
