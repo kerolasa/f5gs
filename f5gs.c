@@ -432,7 +432,7 @@ static int change_state(struct runtime_config *rtc, pid_t pid)
 static char *get_server_status(struct runtime_config *rtc)
 {
 	int sfd;
-	static char buf[sizeof(state_message)] = { 0 };
+	static char buf[sizeof(state_message)];
 
 	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol))) {
 		if (rtc->quiet)
