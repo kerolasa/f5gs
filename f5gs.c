@@ -99,8 +99,10 @@ static void __attribute__ ((__noreturn__))
 }
 
 static void __attribute__ ((__noreturn__))
-    faillog(char *msg)
+    faillog(struct runtime_config *rtc, char *msg)
 {
+	if (rtc->run_foreground)
+		err(EXIT_FAILURE, "%s", msg);
 #ifdef USE_SYSTEMD
 	sd_journal_send("MESSAGE=%s", msg,
 			"STRERROR=%s", strerror(errno),
@@ -153,7 +155,7 @@ static char *construct_pid_file(struct runtime_config *rtc)
 	ret = asprintf(&path, "%s/%s:%d", rtc->state_dir, s,
 		       ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
 	if (ret < 0)
-		faillog("cannot allocate memory");
+		faillog(rtc, "cannot allocate memory");
 	return path;
 }
 
@@ -339,7 +341,7 @@ static void run_server(struct runtime_config *rtc)
 
 	ret = sd_listen_fds(0);
 	if (1 < ret)
-		faillog("no or too many file descriptors received");
+		faillog(rtc, "no or too many file descriptors received");
 	else if (ret == 1)
 		rtc->server_socket = SD_LISTEN_FDS_START + 0;
 	else {
@@ -370,7 +372,7 @@ static void run_server(struct runtime_config *rtc)
 	if (rtc->state_code == STATE_UNKNOWN)
 		read_status_from_file(rtc);
 	if (update_pid_file(rtc))
-		faillog("cannot write pid file");
+		faillog(rtc, "cannot write pid file");
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 #ifdef USE_SYSTEMD
 	sd_journal_send("MESSAGE=service started",
