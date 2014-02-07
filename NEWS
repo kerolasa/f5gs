@@ -1,3 +1,20 @@
+2014-02-07
+	Release v0.4.  When ever a developer tells program is ready to
+	be used is is reasonable to doubt statement being somehow
+	wrong by mistake, or due overconfidence.  The latest version
+	changes persistent state file path, and format.
+
+	Format got go be changed because use of state numbers changed,
+	and it became obvious the state file has to be versioned in
+	order to recover from similar mess in future.  This time the
+	version checking is not done quite by the book, because version
+	file did not persist over reboot.  Earlier use of /var/run was
+	a mistake, now the state is wrote to /var/spool instead.
+
+	If you upgrade be sure to set preferred state after an upgrade
+	action.  Lets hope there are no more breaking changes in
+	future, that require user interaction.
+
 2014-01-18
 	Release v0.3.  This release adds support to systemd and makes
 	messaging to use journald when they are available.  Various
