@@ -22,7 +22,7 @@ set -o pipefail # make pipe writer failure to cause exit on error
 F5GS_REQUESTED_STATE='dummyvalue'
 F5GS_LISTEN='0.0.0.0'
 F5GS_PORT='32546'
-#F5GS_STATEDIR='/var/run/f5gs'
+#F5GS_STATEDIR='/var/spool/f5gs'
 RETVAL=0
 
 msg() {

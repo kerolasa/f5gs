@@ -75,9 +75,9 @@ if [ $1 -eq 0 ] ; then
 	/sbin/service %{name} stop >/dev/null 2>&1 || :
 	/sbin/chkconfig --del %{name} || :
 	# Some want to remove state files automatically.  Unfortunately
-	# there is no %{__runstatedir} so this is as good one can get
+	# there is no %{__spooldir} so this is as good one can get
 	# the removal.
-	# %{__rm} -rf %{_localstatedir}/run/%{name}
+	# %{__rm} -rf %{_localstatedir}/spool/%{name}
 fi
 
 %clean
@@ -92,6 +92,9 @@ rm -rf %{buildroot}
 %_datadir/%{name}/*
 
 %changelog
+* Fri Feb 07 2014  Sami Kerola <kerolasa@iki.fi>
+- Use /var/spool/ rather than /var/run/ that is deleted at reboot.
+
 * Thu Dec 12 2013  Sami Kerola <kerolasa@iki.fi>
 - Fix installation and upgrade time actions.
 
