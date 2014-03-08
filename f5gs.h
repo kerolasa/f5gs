@@ -61,7 +61,7 @@ struct runtime_config {
 };
 
 static void __attribute__ ((__noreturn__)) usage(FILE *out);
-static void __attribute__ ((__noreturn__)) faillog(struct runtime_config *rtc, char *msg);
+static void __attribute__ ((__noreturn__)) faillog(struct runtime_config *rtc, char *msg, ...);
 static void *handle_request(void *voidsocket);
 static char *construct_pid_file(struct runtime_config *rtc);
 static int update_pid_file(struct runtime_config *rtc);
