@@ -147,9 +147,13 @@ static char *construct_pid_file(struct runtime_config *rtc)
 {
 	char *path;
 	void *p;
+	char separator[1] = { '\0' }, *last_slash;
 	char s[INET6_ADDRSTRLEN];
 	int ret;
 
+	last_slash = strrchr(rtc->state_dir, '/');
+	if (*(last_slash + 1) != '\0' && *(last_slash + 1) != '/')
+		separator[0] = '/';
 	inet_ntop(rtc->res->ai_family, rtc->res->ai_addr->sa_data, s, sizeof(s));
 	switch (rtc->res->ai_family) {
 	case AF_INET:
@@ -160,7 +164,7 @@ static char *construct_pid_file(struct runtime_config *rtc)
 		break;
 	}
 	inet_ntop(rtc->res->ai_family, p, s, sizeof(s));
-	ret = asprintf(&path, "%s/%s:%d", rtc->state_dir, s,
+	ret = asprintf(&path, "%s%s%s:%d", rtc->state_dir, separator, s,
 		       ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
 	if (ret < 0)
 		faillog(rtc, "cannot allocate memory");
