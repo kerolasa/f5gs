@@ -42,18 +42,20 @@
 #include <limits.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/signalfd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <syslog.h>
 #include <unistd.h>
-#include <sys/wait.h>
 
 #include "close-stream.h"
 #include "closeout.h"
@@ -200,7 +202,7 @@ static int update_pid_file(struct runtime_config *rtc)
 	return 0;
 }
 
-static void catch_signals(int signal)
+static void catch_signals(struct signalfd_siginfo *info)
 {
 	int old_state;
 
@@ -215,7 +217,7 @@ static void catch_signals(int signal)
 		return;
 	}
 	old_state = rtc.state_code;
-	switch (signal) {
+	switch (info->ssi_signo) {
 	case SIG_DISABLE:
 		rtc.state_code = STATE_DISABLE;
 		break;
@@ -235,7 +237,10 @@ static void catch_signals(int signal)
 #ifdef USE_SYSTEMD
 	sd_journal_send("MESSAGE=state change %s -> %s", state_message[old_state], state_message[rtc.state_code],
 			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE),
-			"PRIORITY=6", NULL);
+			"PRIORITY=6",
+			"SIGNAL_SENDER_UID=%" PRIu32, info->ssi_uid,
+			"SIGNAL_SENDER_PID=%" PRIu32, info->ssi_pid,
+			NULL);
 #else
 	syslog(LOG_INFO, "signal received, state %s -> %s", state_message[old_state],
 	       state_message[rtc.state_code]);
@@ -294,23 +299,38 @@ static void daemonize(void)
 static void *signal_handler_thread(void *arg)
 {
 	sigset_t *set = arg;
-	int sig;
-	int errsave = errno;
+	int fd, ret;
+	struct pollfd pfd[1];
+	struct signalfd_siginfo info;
+	ssize_t sz;
+
+	fd = signalfd(-1, set, 0);
+	pfd[0].fd = fd;
+	pfd[0].events = POLLIN | POLLERR | POLLHUP;
+	if (fd < 0)
+		err(EXIT_FAILURE, "signalfd");
 
 	while (1) {
-		if (sigwait(set, &sig))
+		ret = poll(pfd, 1, -1);
+		if (ret < 0) {
+			warn("signalfd poll failed");
 			stop_server(0);
-		switch (sig) {
+		}
+		sz = read(fd, &info, sizeof(info));
+		if (sz != sizeof(info)) {
+			warn("read from signalfd failed");
+			stop_server(0);
+		}
+		switch (info.ssi_signo) {
 		case SIG_DISABLE:
 		case SIG_MAINTENANCE:
 		case SIG_ENABLE:
-			catch_signals(sig);
+			catch_signals(&info);
 			break;
 		default:
 			stop_server(0);
 		}
 	}
-	errno = errsave;
 	return NULL;
 }
 

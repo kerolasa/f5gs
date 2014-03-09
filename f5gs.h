@@ -65,7 +65,7 @@ static void __attribute__ ((__noreturn__)) faillog(struct runtime_config *rtc, c
 static void *handle_request(void *voidsocket);
 static char *construct_pid_file(struct runtime_config *rtc);
 static int update_pid_file(struct runtime_config *rtc);
-static void catch_signals(int signal);
+static void catch_signals(struct signalfd_siginfo *info);
 static void read_status_from_file(struct runtime_config *rtc);
 static void daemonize(void);
 static void *signal_handler_thread(void *arg);
