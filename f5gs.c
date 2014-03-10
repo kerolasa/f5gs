@@ -219,7 +219,7 @@ static void catch_signals(int signal)
 				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
 				"STRERROR=%s", strerror(errno), "PRIORITY=%d", LOG_ERR, NULL);
 #else
-		syslog(LOG_ERR, "could not get state change lock", state_message[rtc.state_code]);
+		syslog(LOG_ERR, "could not get state change lock");
 #endif
 		return;
 	}
@@ -256,9 +256,16 @@ static void catch_signals(int signal)
 #endif
 			NULL);
 #else /* USE_SYSTEMD */
-	syslog(LOG_INFO, "signal received, state %s -> %s", state_message[old_state],
-	       state_message[rtc.state_code]);
+	syslog(LOG_INFO, "signal received"
+#ifdef HAVE_SIGNALFD
+	       " from uid: %" PRIu32 " pid: %" PRIu32
 #endif
+	       ", state %s -> %s",
+#ifdef HAVE_SIGNALFD
+	       info->ssi_uid, info->ssi_pid,
+#endif
+	       state_message[old_state], state_message[rtc.state_code]);
+#endif /* USE_SYSTEMD */
 }
 
 static void read_status_from_file(struct runtime_config *rtc)
