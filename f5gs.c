@@ -49,7 +49,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/signalfd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -65,6 +64,10 @@
 #ifdef USE_SYSTEMD
 # include <systemd/sd-daemon.h>
 # include <systemd/sd-journal.h>
+#endif
+
+#ifdef HAVE_SIGNALFD
+# include <sys/signalfd.h>
 #endif
 
 #include "f5gs.h"
@@ -202,7 +205,11 @@ static int update_pid_file(struct runtime_config *rtc)
 	return 0;
 }
 
+#ifdef HAVE_SIGNALFD
 static void catch_signals(struct signalfd_siginfo *info)
+#else
+static void catch_signals(int signal)
+#endif
 {
 	int old_state;
 
@@ -217,7 +224,12 @@ static void catch_signals(struct signalfd_siginfo *info)
 		return;
 	}
 	old_state = rtc.state_code;
+#ifdef HAVE_SIGNALFD
 	switch (info->ssi_signo) {
+#else
+	switch (signal) {
+#endif
+
 	case SIG_DISABLE:
 		rtc.state_code = STATE_DISABLE;
 		break;
@@ -238,10 +250,12 @@ static void catch_signals(struct signalfd_siginfo *info)
 	sd_journal_send("MESSAGE=state change %s -> %s", state_message[old_state], state_message[rtc.state_code],
 			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE),
 			"PRIORITY=6",
+#ifdef HAVE_SIGNALFD
 			"SIGNAL_SENDER_UID=%" PRIu32, info->ssi_uid,
 			"SIGNAL_SENDER_PID=%" PRIu32, info->ssi_pid,
+#endif
 			NULL);
-#else
+#else /* USE_SYSTEMD */
 	syslog(LOG_INFO, "signal received, state %s -> %s", state_message[old_state],
 	       state_message[rtc.state_code]);
 #endif
@@ -299,6 +313,7 @@ static void daemonize(void)
 static void *signal_handler_thread(void *arg)
 {
 	sigset_t *set = arg;
+#ifdef HAVE_SIGNALFD
 	int fd, ret;
 	struct pollfd pfd[1];
 	struct signalfd_siginfo info;
@@ -309,7 +324,6 @@ static void *signal_handler_thread(void *arg)
 	pfd[0].events = POLLIN | POLLERR | POLLHUP;
 	if (fd < 0)
 		err(EXIT_FAILURE, "signalfd");
-
 	while (1) {
 		ret = poll(pfd, 1, -1);
 		if (ret < 0) {
@@ -322,10 +336,22 @@ static void *signal_handler_thread(void *arg)
 			stop_server(0);
 		}
 		switch (info.ssi_signo) {
+#else /* HAVE_SIGNALFD */
+	int sig;
+
+	while (1) {
+		if (sigwait(set, &sig))
+			stop_server(0);
+		switch (sig) {
+#endif /* HAVE_SIGNALFD */
 		case SIG_DISABLE:
 		case SIG_MAINTENANCE:
 		case SIG_ENABLE:
+#ifdef HAVE_SIGNALFD
 			catch_signals(&info);
+#else
+			catch_signals(sig);
+#endif
 			break;
 		default:
 			stop_server(0);

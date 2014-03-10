@@ -48,7 +48,10 @@ AC_TYPE_SSIZE_T
 
 # Checks for library functions.
 AC_FUNC_MMAP
-AC_CHECK_FUNCS([clearenv])
+AC_CHECK_FUNCS([ \
+	clearenv \
+	signalfd \
+])
 
 AC_ARG_ENABLE([systemd],
 	AS_HELP_STRING([--enable-systemd], [build with systemd socket activation and use journald messages]),
