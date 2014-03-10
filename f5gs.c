@@ -437,13 +437,13 @@ static void run_server(struct runtime_config *rtc)
 		read_status_from_file(rtc);
 	if (update_pid_file(rtc))
 		faillog(rtc, "cannot write pid file %s", rtc->pid_file);
-	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 #ifdef USE_SYSTEMD
 	sd_journal_send("MESSAGE=service started",
 			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START),
 			"STATE=%s", state_message[rtc->state_code], "PRIORITY=%d", LOG_INFO, NULL);
 	sd_notify(0, "READY=1");
 #else
+	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 	syslog(LOG_INFO, "started in state %s", state_message[rtc->state_code]);
 #endif
 
