@@ -135,9 +135,9 @@ static void __attribute__ ((__noreturn__))
 	struct timeval timeout;
 
 	pthread_detach(pthread_self());
-	pthread_rwlock_rdlock(&(rtc.lock));
+	pthread_rwlock_rdlock(&rtc.lock);
 	send(sock, state_message[rtc.state_code], rtc.message_lenght, 0);
-	pthread_rwlock_unlock(&(rtc.lock));
+	pthread_rwlock_unlock(&rtc.lock);
 	/* let the client send, and ignore */
 	timeout.tv_sec = 1;
 	timeout.tv_usec = 0;
@@ -245,7 +245,7 @@ static void catch_signals(int signal)
 		abort();
 	}
 	rtc.message_lenght = strlen(state_message[rtc.state_code]);
-	pthread_rwlock_unlock(&(rtc.lock));
+	pthread_rwlock_unlock(&rtc.lock);
 	update_pid_file(&rtc);
 #ifdef USE_SYSTEMD
 	sd_journal_send("MESSAGE=state change %s -> %s", state_message[old_state], state_message[rtc.state_code],
@@ -433,7 +433,7 @@ static void run_server(struct runtime_config *rtc)
 	if (pthread_attr_init(&attr))
 		err(EXIT_FAILURE, "cannot init thread attribute");
 
-	if (pthread_rwlock_init(&(rtc->lock), NULL))
+	if (pthread_rwlock_init(&rtc->lock, NULL))
 		err(EXIT_FAILURE, "cannot init read-write lock");
 
 	if (!rtc->run_foreground)
@@ -494,11 +494,11 @@ static int run_script(struct runtime_config *rtc, char *script)
 static int change_state(struct runtime_config *rtc, pid_t pid)
 {
 	int ret = 0;
-	if (!(rtc->no_scripts) && !access(F5GS_PRE, X_OK))
+	if (!rtc->no_scripts && !access(F5GS_PRE, X_OK))
 		ret = run_script(rtc, F5GS_PRE);
 	if (!ret)
 		ret = kill(pid, rtc->client_signal);
-	if (!(rtc->no_scripts) && !ret && !access(F5GS_POST, X_OK))
+	if (!rtc->no_scripts && !ret && !access(F5GS_POST, X_OK))
 		ret = run_script(rtc, F5GS_POST);
 	return ret;
 }
@@ -650,7 +650,7 @@ int main(int argc, char **argv)
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
-	e = getaddrinfo(listen, port, &hints, &(rtc.res));
+	e = getaddrinfo(listen, port, &hints, &rtc.res);
 	if (e) {
 		if (rtc.quiet)
 			exit(STATE_UNKNOWN);
