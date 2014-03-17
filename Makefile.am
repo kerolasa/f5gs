@@ -19,9 +19,15 @@ bin_PROGRAMS = f5gs
 f5gs_SOURCES = f5gs.c f5gs.h
 f5gs_LDADD = \
 	$(top_builddir)/lib/lib$(PACKAGE).la \
+	$(GETADDRINFO_LIB) \
+	$(HOSTENT_LIB) \
+	$(INET_NTOP_LIB) \
 	$(LIBSOCKET) \
+	$(LIB_POLL) \
 	$(LIB_PTHREAD) \
-	$(LTLIBINTL)
+	$(LIB_SELECT) \
+	$(LTLIBINTL) \
+	$(SERVENT_LIB)
 
 if USE_SYSTEMD
 f5gs_LDADD += \
