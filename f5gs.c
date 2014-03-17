@@ -469,38 +469,46 @@ static void run_server(struct runtime_config *rtc)
 static int run_script(struct runtime_config *rtc, char *script)
 {
 	pid_t child;
-	int status;
+	int status = 0;
 
+	if (rtc->no_scripts || access(script, X_OK))
+		return 0;
 	child = fork();
-	if (0 <= child) {
-		if (child == 0) {
-			setuid(geteuid());
+	if (child < 0)
+		errx(EXIT_FAILURE, "running %s failed", script);
+	if (child == 0) {
+		setuid(geteuid());
 #ifdef HAVE_CLEARENV
-			clearenv();
+		clearenv();
 #else
-			environ = NULL;
+		environ = NULL;
 #endif
-			setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin", 1);
-			return execv(script, rtc->argv);
-		} else {
-			wait(&status);
+		setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin", 1);
+		exit(execv(script, rtc->argv));
+	}
+	while (child) {
+		if (waitpid(child, &status, WUNTRACED | WCONTINUED) < 0)
+			err(EXIT_FAILURE, "waitpid() failed");
+		if (WIFSIGNALED(status))
+			errx(EXIT_FAILURE, "script %s killed (signal %d)", script, WTERMSIG(status));
+		else if (WIFEXITED(status)) {
+			if (WEXITSTATUS(status))
+				warnx("execution of %s failed (return: %d)", script, WEXITSTATUS(status));
 			return WEXITSTATUS(status);
 		}
 	}
-	warn("running %s failed", script);
-	return 1;
+	abort();
 }
 
-static int change_state(struct runtime_config *rtc, pid_t pid)
+static void change_state(struct runtime_config *rtc, pid_t pid)
 {
-	int ret = 0;
-	if (!rtc->no_scripts && !access(F5GS_PRE, X_OK))
-		ret = run_script(rtc, F5GS_PRE);
-	if (!ret)
-		ret = kill(pid, rtc->client_signal);
-	if (!rtc->no_scripts && !ret && !access(F5GS_POST, X_OK))
-		ret = run_script(rtc, F5GS_POST);
-	return ret;
+	int ret;
+
+	if (run_script(rtc, F5GS_PRE))
+		return;
+	if (kill(pid, rtc->client_signal))
+		err(EXIT_FAILURE, "sending signal failed");
+	run_script(rtc, F5GS_POST);
 }
 
 static char *get_server_status(struct runtime_config *rtc)
@@ -544,13 +552,7 @@ static int set_server_status(struct runtime_config *rtc)
 #else
 		syslog(LOG_ERR, "close failed: %s: %s", rtc->pid_file, strerror(errno));
 #endif
-	if (change_state(rtc, pid)) {
-		if (errno == 0)
-			warnx("execution of %s failed", F5GS_PRE);
-		else
-			warn("sending signal failed");
-		return EXIT_FAILURE;
-	}
+	change_state(rtc, pid);
 	username = getenv("USER");
 	sudo_user = getenv("SUDO_USER");
 #ifdef USE_SYSTEMD
