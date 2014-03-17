@@ -627,6 +627,7 @@ int main(int argc, char **argv)
 			break;
 		case 'q':
 			rtc.quiet = 1;
+			break;
 		case NO_SCRIPTS_OPT:
 			rtc.no_scripts = 1;
 			break;
