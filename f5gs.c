@@ -391,6 +391,7 @@ static void __attribute__ ((__noreturn__))
 {
 	pthread_rwlock_destroy(&(rtc.lock));
 	freeaddrinfo(rtc.res);
+	free(rtc.pid_file);
 	close(rtc.server_socket);
 
 #ifdef USE_SYSTEMD
@@ -688,6 +689,7 @@ int main(int argc, char **argv)
 	} else
 		printf("current status is: %s\n", get_server_status(&rtc));
 	freeaddrinfo(rtc.res);
+	free(rtc.pid_file);
 
 	return retval;
 }
