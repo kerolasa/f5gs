@@ -77,7 +77,7 @@ static void setup_signal_handling(void);
 static void stop_server(int sig __attribute__ ((__unused__)));
 static void run_server(struct runtime_config *rtc);
 static int run_script(struct runtime_config *rtc, char *script);
-static void change_state(struct runtime_config *rtc, pid_t pid);
+static int change_state(struct runtime_config *rtc, pid_t pid);
 static char *get_server_status(struct runtime_config *rtc);
 static int set_server_status(struct runtime_config *rtc);
 

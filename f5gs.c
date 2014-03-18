@@ -501,15 +501,17 @@ static int run_script(struct runtime_config *rtc, char *script)
 	abort();
 }
 
-static void change_state(struct runtime_config *rtc, pid_t pid)
+static int change_state(struct runtime_config *rtc, pid_t pid)
 {
 	int ret;
 
 	if (run_script(rtc, F5GS_PRE))
-		return;
+		return 1;
 	if (kill(pid, rtc->client_signal))
 		err(EXIT_FAILURE, "sending signal failed");
-	run_script(rtc, F5GS_POST);
+	if (run_script(rtc, F5GS_POST))
+		return 1;
+	return 0;
 }
 
 static char *get_server_status(struct runtime_config *rtc)
@@ -553,7 +555,8 @@ static int set_server_status(struct runtime_config *rtc)
 #else
 		syslog(LOG_ERR, "close failed: %s: %s", rtc->pid_file, strerror(errno));
 #endif
-	change_state(rtc, pid);
+	if (change_state(rtc, pid))
+		errx(EXIT_FAILURE, "aborting action, consider running with --no-scripts");
 	username = getenv("USER");
 	sudo_user = getenv("SUDO_USER");
 #ifdef USE_SYSTEMD
