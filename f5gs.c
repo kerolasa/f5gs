@@ -116,7 +116,8 @@ static void __attribute__ ((__noreturn__))
 	char *s;
 
 	va_start(args, msg);
-	vasprintf(&s, msg, args);
+	if (vasprintf(&s, msg, args) < 0)
+		goto fail;
 	if (rtc->run_foreground) {
 		err(EXIT_FAILURE, "%s", s);
 	}
@@ -127,6 +128,7 @@ static void __attribute__ ((__noreturn__))
 #else
 	syslog(LOG_ERR, "%s: %s", s, strerror(errno));
 #endif
+ fail:
 	free(s);
 	va_end(args);
 	exit(EXIT_FAILURE);
@@ -173,6 +175,8 @@ static char *construct_pid_file(struct runtime_config *rtc)
 	case AF_INET6:
 		p = &((struct sockaddr_in6 *)rtc->res->ai_addr)->sin6_addr;
 		break;
+	default:
+		abort();
 	}
 	inet_ntop(rtc->res->ai_family, p, s, sizeof(s));
 	ret = asprintf(&path, "%s%s%s:%d", rtc->state_dir, separator, s,
@@ -310,7 +314,8 @@ static void daemonize(void)
 	}
 	if (!setsid())
 		err(EXIT_FAILURE, "cannot setsid");
-	chdir("/");
+	if (chdir("/"))
+		err(EXIT_FAILURE, "cannot chdir");
 	if ((fd = open("/dev/null", O_RDWR, 0)) != -1) {
 		dup2(fd, STDIN_FILENO);
 		dup2(fd, STDOUT_FILENO);
@@ -479,7 +484,8 @@ static int run_script(struct runtime_config *rtc, char *script)
 	if (child < 0)
 		errx(EXIT_FAILURE, "running %s failed", script);
 	if (child == 0) {
-		setuid(geteuid());
+		if (setuid(geteuid()))
+			err(EXIT_FAILURE, "setuid() failed");
 #ifdef HAVE_CLEARENV
 		clearenv();
 #else
@@ -529,7 +535,8 @@ static char *get_server_status(struct runtime_config *rtc)
 		else
 			err(EXIT_FAILURE, "cannot connect");
 	}
-	read(sfd, buf, sizeof(state_message));
+	if (read(sfd, buf, sizeof(state_message)) < 0)
+		err(EXIT_FAILURE, "reading socket failed");
 	return buf;
 }
 
@@ -541,7 +548,8 @@ static int set_server_status(struct runtime_config *rtc)
 
 	if (!(pidfd = fopen(rtc->pid_file, "r")))
 		err(EXIT_FAILURE, "cannot open pid file: %s", rtc->pid_file);
-	fscanf(pidfd, "%d", &pid);
+	if (fscanf(pidfd, "%d", &pid) != 1)
+		err(EXIT_FAILURE, "broken pid file: %s", rtc->pid_file);
 #ifndef USE_SYSTEMD
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 #endif
