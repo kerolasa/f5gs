@@ -50,7 +50,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -61,6 +60,12 @@
 #include "closeout.h"
 #include "progname.h"
 #include "xalloc.h"
+
+#if HAVE_SYS_SOCKET_H
+# include <sys/socket.h>
+#elif HAVE_WS2TCPIP_H
+# include <ws2tcpip.h>
+#endif
 
 #ifdef USE_SYSTEMD
 # include <systemd/sd-daemon.h>
