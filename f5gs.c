@@ -650,7 +650,8 @@ int main(int argc, char **argv)
 			usage(stderr);
 		}
 	}
-
+	if (0 < argc - optind)
+		errx(EXIT_FAILURE, "too many arguments");
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
