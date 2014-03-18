@@ -54,9 +54,9 @@ AC_CHECK_FUNCS([ \
 ])
 
 AC_ARG_ENABLE([systemd],
-	AS_HELP_STRING([--enable-systemd], [build with systemd socket activation and use journald messages]),
-	[enable_systemd=yes],
-	[enable_systemd=no]
+	AS_HELP_STRING([--disable-systemd], [do not build with systemd and journald support]),
+	[enable_systemd=no],
+	[enable_systemd=yes]
 )
 AM_CONDITIONAL([USE_SYSTEMD], [test "x$enable_systemd" = xyes])
 AS_IF([test "x$enable_systemd" = xyes], [
