@@ -324,10 +324,9 @@ static void *signal_handler_thread(void *arg)
 {
 	sigset_t *set = arg;
 #ifdef HAVE_SIGNALFD
-	int fd, ret;
+	int fd;
 	struct pollfd pfd[1];
 	struct signalfd_siginfo info;
-	ssize_t sz;
 
 	fd = signalfd(-1, set, 0);
 	pfd[0].fd = fd;
@@ -335,8 +334,8 @@ static void *signal_handler_thread(void *arg)
 	if (fd < 0)
 		err(EXIT_FAILURE, "signalfd");
 	while (1) {
-		ret = poll(pfd, 1, -1);
-		if (ret < 0) {
+		ssize_t sz;
+		if (poll(pfd, 1, -1) < 0) {
 			warn("signalfd poll failed");
 			stop_server(0);
 		}
@@ -505,8 +504,6 @@ static int run_script(struct runtime_config *rtc, char *script)
 
 static int change_state(struct runtime_config *rtc, pid_t pid)
 {
-	int ret;
-
 	if (run_script(rtc, F5GS_PRE))
 		return 1;
 	if (kill(pid, rtc->client_signal))
