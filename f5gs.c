@@ -509,8 +509,7 @@ static int change_state(struct runtime_config *rtc, pid_t pid)
 		return 1;
 	if (kill(pid, rtc->client_signal))
 		err(EXIT_FAILURE, "sending signal failed");
-	if (run_script(rtc, F5GS_POST))
-		return 1;
+	run_script(rtc, F5GS_POST);
 	return 0;
 }
 
