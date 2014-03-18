@@ -252,26 +252,23 @@ static void catch_signals(int signal)
 	rtc.message_lenght = strlen(state_message[rtc.state_code]);
 	pthread_rwlock_unlock(&rtc.lock);
 	update_pid_file(&rtc);
-#ifdef USE_SYSTEMD
+#ifdef HAVE_SIGNALFD
+# ifdef USE_SYSTEMD
 	sd_journal_send("MESSAGE=state change %s -> %s", state_message[old_state], state_message[rtc.state_code],
-			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE),
-			"PRIORITY=%d", LOG_INFO,
-#ifdef HAVE_SIGNALFD
-			"SIGNAL_SENDER_UID=%" PRIu32, info->ssi_uid,
-			"SIGNAL_SENDER_PID=%" PRIu32, info->ssi_pid,
-#endif
-			NULL);
-#else /* USE_SYSTEMD */
-	syslog(LOG_INFO, "signal received"
-#ifdef HAVE_SIGNALFD
-	       " from uid: %" PRIu32 " pid: %" PRIu32
-#endif
-	       ", state %s -> %s",
-#ifdef HAVE_SIGNALFD
-	       info->ssi_uid, info->ssi_pid,
-#endif
-	       state_message[old_state], state_message[rtc.state_code]);
-#endif /* USE_SYSTEMD */
+			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO,
+			"SIGNAL_SENDER_UID=%" PRIu32, info->ssi_uid, "SIGNAL_SENDER_PID=%" PRIu32, info->ssi_pid, NULL);
+# else
+	syslog(LOG_INFO, "signal received from uid: %" PRIu32 " pid: %" PRIu32 ", state %s -> %s",
+	       info->ssi_uid, info->ssi_pid, state_message[old_state], state_message[rtc.state_code]);
+# endif
+#else	/* HAVE_SIGNALFD */
+# ifdef USE_SYSTEMD
+	sd_journal_send("MESSAGE=state change %s -> %s", state_message[old_state], state_message[rtc.state_code],
+			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO, NULL);
+# else
+	syslog(LOG_INFO, "signal received" ", state %s -> %s", state_message[old_state], state_message[rtc.state_code]);
+# endif
+#endif	/* HAVE_SIGNALFD */
 }
 
 static void read_status_from_file(struct runtime_config *rtc)
