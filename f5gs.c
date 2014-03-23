@@ -680,7 +680,7 @@ int main(int argc, char **argv)
 			rtc.state_code = signal_state[rtc.client_signal];
 			rtc.message_lenght = strlen(state_message[rtc.state_code]);
 			if (update_pid_file(&rtc))
-				err(EXIT_FAILURE, "cannot write pid file");
+				err(EXIT_FAILURE, "cannot write pid file: %s", rtc.pid_file);
 		} else {
 			rtc.state_code = STATE_UNKNOWN;
 			rtc.message_lenght = strlen(state_message[STATE_UNKNOWN]);
