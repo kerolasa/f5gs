@@ -1,0 +1,14 @@
+#!/bin/bash
+
+testtmp=$(readlink -f $0)
+testdir=${testtmp%/*}
+
+if [ ! -d $testdir/outputs ]; then
+	mkdir $testdir/outputs
+else
+	rm -f $testdir/outputs/127.0.0.1:19862
+fi
+
+f5gs --listen 127.0.0.1 --port 19862 --state $testdir/outputs --server
+
+exit $?

@@ -21,6 +21,7 @@ AM_INIT_AUTOMAKE([
 	no-dist-gzip
 	subdir-objects
 	tar-pax
+	serial-tests
 ])
 
 # Checks for programs.

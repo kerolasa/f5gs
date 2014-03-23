@@ -1,0 +1,22 @@
+#!/bin/bash
+
+testname=${0##*/}
+testtmp=$(readlink -f $0)
+testdir=${testtmp%/*}
+declare -A testret
+testret[enable]=0
+testret[maintenance]=1
+testret[disable]=2
+retval=0
+
+
+f5gs --listen 127.0.0.1 --port 19862 --state $testdir/outputs --no-scripts \
+	--$testname > $testdir/outputs/$testname 2>&1
+diff -u $testdir/{expected,outputs}/$testname
+if [ $? -ne 0 ]; then retval=1; fi
+
+f5gs --listen 127.0.0.1 --port 19862 --state $testdir/outputs --no-scripts \
+	--quiet 2>&1
+if [ $? -ne ${testret[$testname]} ]; then retval=1; echo 'wrong return value'; fi
+
+exit $retval

@@ -1,0 +1,18 @@
+TESTS_ENVIRONMENT = top_srcdir=$(top_srcdir) PATH=$(top_builddir)$(PATH_SEPARATOR)$$PATH
+
+TESTS = \
+	tests/start-server \
+	tests/unknown \
+	tests/enable \
+	tests/disable \
+	tests/maintenance \
+	tests/stop-server
+
+EXTRA_DIST += \
+	tests/expected \
+	$(TESTS)
+
+clean-local-tests:
+	rm -rf $(top_builddir)/tests/outputs
+
+CLEAN_LOCALS = clean-local-tests

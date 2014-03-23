@@ -62,5 +62,7 @@ systemdsystemunit_DATA = f5gs.service f5gs.socket
 CLEANFILES += f5gs.service f5gs.socket
 endif
 
+include tests/Makemodule.am
+
 extrasdir = $(datadir)/@PACKAGE@
 dist_extras_SCRIPTS = contrib/pre-script

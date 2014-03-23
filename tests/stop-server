@@ -1,0 +1,8 @@
+#!/bin/bash
+
+testtmp=$(readlink -f $0)
+testdir=${testtmp%/*}
+
+read -ra state_array < $testdir/outputs/127.0.0.1\:19862
+kill -9 ${state_array[0]}
+exit $?
