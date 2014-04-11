@@ -123,11 +123,12 @@ static void __attribute__ ((__noreturn__))
 		err(EXIT_FAILURE, "%s", s);
 	}
 #ifdef USE_SYSTEMD
-	sd_journal_send("MESSAGE=%s", s,
-			"STRERROR=%s", strerror_r(errno, buf, sizeof(buf)),
-			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR), "PRIORITY=%d", LOG_ERR, NULL);
+	if (strerror_r(errno, buf, sizeof(buf)))
+		sd_journal_send("MESSAGE=%s", s, "STRERROR=%s", buf, "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
+				"PRIORITY=%d", LOG_ERR, NULL);
 #else
-	syslog(LOG_ERR, "%s: %s", s, strerror_r(errno, buf, sizeof(buf)));
+	if (strerror_r(errno, buf, sizeof(buf)))
+		syslog(LOG_ERR, "%s: %s", s, buf);
 #endif
  fail:
 	free(s);
@@ -199,22 +200,26 @@ static int update_pid_file(struct runtime_config *rtc)
 			return 1;
 	if (!(fd = fopen(rtc->pid_file, "w"))) {
 #ifdef USE_SYSTEMD
-		sd_journal_send("MESSAGE=could not open file %s", rtc->pid_file,
-				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
-				"STRERROR=%s", strerror_r(errno, buf, sizeof(buf)), "PRIORITY=%d", LOG_ERR, NULL);
+		if (strerror_r(errno, buf, sizeof(buf)))
+			sd_journal_send("MESSAGE=could not open file %s", rtc->pid_file, "MESSAGE_ID=%s",
+					SD_ID128_CONST_STR(MESSAGE_ERROR), "STRERROR=%s", buf, "PRIORITY=%d", LOG_ERR,
+					NULL);
 #else
-		syslog(LOG_ERR, "could not open file: %s: %s", rtc->pid_file, strerror(errno, buf, sizeof(buf)));
+		if (strerror_r(errno, buf, sizeof(buf)))
+			syslog(LOG_ERR, "could not open file: %s: %s", rtc->pid_file, buf);
 #endif
 		return 1;
 	}
 	fprintf(fd, "%u %d %d", getpid(), rtc->state_code, STATE_FILE_VERSION);
 	if (close_stream(fd))
 #ifdef USE_SYSTEMD
-		sd_journal_send("MESSAGE=closing %s failed", rtc->pid_file,
-				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
-				"STRERROR=%s", strerror_r(errno, buf, sizeof(buf)), "PRIORITY=%d", LOG_ERR, NULL);
+		if (strerror_r(errno, buf, sizeof(buf)))
+			sd_journal_send("MESSAGE=closing %s failed", rtc->pid_file, "MESSAGE_ID=%s",
+					SD_ID128_CONST_STR(MESSAGE_ERROR), "STRERROR=%s", buf, "PRIORITY=%d", LOG_ERR,
+					NULL);
 #else
-		syslog(LOG_ERR, "close failed: %s: %s", rtc->pid_file, strerror_r(errno, buf, sizeof(buf)));
+		if (strerror_r(errno, buf, sizeof(buf)))
+			syslog(LOG_ERR, "close failed: %s: %s", rtc->pid_file, buf);
 #endif
 	return 0;
 }
@@ -226,13 +231,14 @@ static void catch_signals(int signal)
 #endif
 {
 	int old_state;
-	char buf[256];
 
 	if (pthread_rwlock_wrlock(&rtc.lock)) {
 #ifdef USE_SYSTEMD
-		sd_journal_send("MESSAGE=could not get state change lock",
-				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
-				"STRERROR=%s", strerror_r(errno, buf, sizeof(buf)), "PRIORITY=%d", LOG_ERR, NULL);
+		char buf[256];
+		if (strerror_r(errno, buf, sizeof(buf)))
+			sd_journal_send("MESSAGE=could not get state change lock", "MESSAGE_ID=%s",
+					SD_ID128_CONST_STR(MESSAGE_ERROR), "STRERROR=%s", buf, "PRIORITY=%d", LOG_ERR,
+					NULL);
 #else
 		syslog(LOG_ERR, "could not get state change lock");
 #endif
@@ -267,8 +273,8 @@ static void catch_signals(int signal)
 			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO,
 			"SIGNAL_SENDER_UID=%" PRIu32, info->ssi_uid, "SIGNAL_SENDER_PID=%" PRIu32, info->ssi_pid, NULL);
 # else
-	syslog(LOG_INFO, "signal received from uid: %" PRIu32 " pid: %" PRIu32 ", state %s -> %s",
-	       info->ssi_uid, info->ssi_pid, state_message[old_state], state_message[rtc.state_code]);
+	syslog(LOG_INFO, "signal received from uid: %" PRIu32 " pid: %" PRIu32 ", state %s -> %s", info->ssi_uid,
+	       info->ssi_pid, state_message[old_state], state_message[rtc.state_code]);
 # endif
 #else	/* HAVE_SIGNALFD */
 # ifdef USE_SYSTEMD
@@ -458,9 +464,8 @@ static void run_server(struct runtime_config *rtc)
 	if (update_pid_file(rtc))
 		faillog(rtc, "cannot write pid file %s", rtc->pid_file);
 #ifdef USE_SYSTEMD
-	sd_journal_send("MESSAGE=service started",
-			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START),
-			"STATE=%s", state_message[rtc->state_code], "PRIORITY=%d", LOG_INFO, NULL);
+	sd_journal_send("MESSAGE=service started", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START), "STATE=%s",
+			state_message[rtc->state_code], "PRIORITY=%d", LOG_INFO, NULL);
 	sd_notify(0, "READY=1");
 #else
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
@@ -560,21 +565,21 @@ static int set_server_status(struct runtime_config *rtc)
 #endif
 	if (close_stream(pidfd))
 #ifdef USE_SYSTEMD
-		sd_journal_send("MESSAGE=closing %s failed", rtc->pid_file,
-				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
-				"STRERROR=%s", strerror_r(errno, buf, sizeof(buf)), "PRIORITY=%d", LOG_ERR, NULL);
+		if (strerror_r(errno, buf, sizeof(buf)))
+			sd_journal_send("MESSAGE=closing %s failed", rtc->pid_file, "MESSAGE_ID=%s",
+					SD_ID128_CONST_STR(MESSAGE_ERROR), "STRERROR=%s", buf, "PRIORITY=%d", LOG_ERR,
+					NULL);
 #else
-		syslog(LOG_ERR, "close failed: %s: %s", rtc->pid_file, strerror_r(errno, buf, sizeof(buf)));
+		if (strerror_r(errno, buf, sizeof(buf)))
+			syslog(LOG_ERR, "close failed: %s: %s", rtc->pid_file, buf);
 #endif
 	if (change_state(rtc, pid))
 		errx(EXIT_FAILURE, "aborting action, consider running with --no-scripts");
 	username = getenv("USER");
 	sudo_user = getenv("SUDO_USER");
 #ifdef USE_SYSTEMD
-	sd_journal_send("MESSAGE=signal was sent",
-			"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE),
-			"USER=%s", username, "SUDO_USER=%s", sudo_user,
-			"PRIORITY=%d", LOG_INFO, NULL);
+	sd_journal_send("MESSAGE=signal was sent", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "USER=%s",
+			username, "SUDO_USER=%s", sudo_user, "PRIORITY=%d", LOG_INFO, NULL);
 #else
 	syslog(LOG_INFO, "signal was sent by USER: %s SUDO_USER: %s", username, sudo_user);
 	closelog();
