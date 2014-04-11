@@ -29,10 +29,15 @@ f5gs_LDADD = \
 	$(LTLIBINTL) \
 	$(SERVENT_LIB)
 
-if USE_SYSTEMD
+if HAVE_SYSTEMD
+f5gs_CFLAGS = \
+	$(SYSTEMD_DAEMON_CFLAGS) \
+	$(SYSTEMD_JOURNAL_CFLAGS) \
+	$(SYSTEMD_CFLAGS)
 f5gs_LDADD += \
 	$(SYSTEMD_DAEMON_LIBS) \
-	$(SYSTEMD_JOURNAL_LIBS)
+	$(SYSTEMD_JOURNAL_LIBS) \
+	$(SYSTEMD_LIBS)
 endif
 
 edit = sed \
@@ -53,7 +58,7 @@ f5gs.8: f5gs.8.in
 man_MANS = f5gs.8
 CLEANFILES = f5gs.8
 
-if USE_SYSTEMD
+if HAVE_SYSTEMD
 f5gs.service: contrib/f5gs.service.in
 	$(edit) contrib/f5gs.service.in >$@
 f5gs.socket: contrib/f5gs.socket.in

@@ -54,32 +54,38 @@ AC_CHECK_FUNCS([ \
 	signalfd \
 ])
 
-AC_ARG_ENABLE([systemd],
-	AS_HELP_STRING([--disable-systemd], [do not build with systemd and journald support]),
-	[enable_systemd=no],
-	[enable_systemd=yes]
+AC_ARG_WITH([systemd],
+	AS_HELP_STRING([--with-systemd], [build with support for systemd]),
+	[], [with_systemd=check]
 )
-AM_CONDITIONAL([USE_SYSTEMD], [test "x$enable_systemd" = xyes])
-AS_IF([test "x$enable_systemd" = xyes], [
-	PKG_CHECK_MODULES([SYSTEMD_DAEMON], [libsystemd-daemon], [], [
-		AC_MSG_ERROR([cannot find libsystemd-daemon support])
+have_systemd=no
+AS_IF([test "x$with_systemd" != xno], [
+	dnl systemd 209 or newer
+	PKG_CHECK_MODULES([SYSTEMD], [libsystemd], [have_systemd=yes], [have_systemd=no])
+	dnl old versions
+	AS_IF([test "x$have_systemd" != "xyes"], [
+		PKG_CHECK_MODULES([SYSTEMD_DAEMON], [libsystemd-daemon],
+			[have_systemd_daemon=yes], [have_systemd_daemon=no])
+		PKG_CHECK_MODULES([SYSTEMD_JOURNAL], [libsystemd-journal],
+			[have_systemd_journal=yes], [have_systemd_journal=no])
+		AS_IF([test "x$have_systemd_daemon" = "xyes" -a "x$have_systemd_journal" = "xyes"],
+			[have_systemd=yes])
 	])
-	PKG_CHECK_MODULES([SYSTEMD_JOURNAL], [libsystemd-journal], [
-		AC_DEFINE([USE_SYSTEMD], [1], [use systemd socket activation])
-	], [
-		AC_MSG_ERROR([cannot find libsystemd-journal support])
-	])
+	AS_CASE([$with_systemd:$have_systemd],
+	[yes:no],
+		[AC_MSG_ERROR([systemd expected but libsystemd not found])],
+	[*:yes],
+		AC_DEFINE([HAVE_LIBSYSTEMD], [1], [libsystemd is available])
+	)
 ])
+AM_CONDITIONAL([HAVE_SYSTEMD], [test "x$have_systemd" = xyes])
 
 AC_ARG_WITH([systemdsystemunitdir],
 	AS_HELP_STRING([--with-systemdsystemunitdir=DIR], [directory for systemd service files]),
 	[], [with_systemdsystemunitdir=`$PKG_CONFIG --variable=systemdsystemunitdir systemd`])
-
 AS_IF([test "x$with_systemdsystemunitdir" != "xno"], [
 	AC_SUBST([systemdsystemunitdir], [$with_systemdsystemunitdir])
 ])
-AM_CONDITIONAL([HAVE_SYSTEMD],
-	[test -n "$with_systemdsystemunitdir" -a "x$with_systemdsystemunitdir" != "xno"])
 
 AC_DEFUN([DEFAULT_PORT], [32546])
 AC_ARG_WITH([default-portl],
