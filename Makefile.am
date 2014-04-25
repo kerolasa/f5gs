@@ -72,3 +72,12 @@ include tests/Makemodule.am
 
 extrasdir = $(datadir)/@PACKAGE@
 dist_extras_SCRIPTS = contrib/pre-script
+
+dist-hook: gen-ChangeLog
+.PHONY: gen-ChangeLog
+gen-ChangeLog:
+	$(AM_V_GEN)if test -d .git; then			\
+		git log >| $(distdir)/cl-t &&			\
+		{ rm -f $(distdir)/ChangeLog &&			\
+		  mv $(distdir)/cl-t $(distdir)/ChangeLog ; }	\
+	fi

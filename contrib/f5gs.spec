@@ -86,12 +86,16 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root,-)
 %doc COPYING
+%doc ChangeLog
 %doc %_mandir/man*/*
 %_bindir/*
 %{_initddir}/%{name}
 %_datadir/%{name}/*
 
 %changelog
+* Fri Apr 25 2014  Sami Kerola <kerolasa@iki.fi>
+- add ChangeLog to doc directory.
+
 * Fri Feb 07 2014  Sami Kerola <kerolasa@iki.fi>
 - Use /var/spool/ rather than /var/run/ that is deleted at reboot.
 
