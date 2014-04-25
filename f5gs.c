@@ -50,16 +50,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <syslog.h>
 #include <unistd.h>
-
-#include "close-stream.h"
-#include "closeout.h"
-#include "progname.h"
-#include "xalloc.h"
 
 #if HAVE_SYS_SOCKET_H
 # include <sys/socket.h>
@@ -75,6 +71,11 @@
 #ifdef HAVE_SIGNALFD
 # include <sys/signalfd.h>
 #endif
+
+#include "close-stream.h"
+#include "closeout.h"
+#include "progname.h"
+#include "xalloc.h"
 
 #include "f5gs.h"
 
