@@ -77,7 +77,7 @@ dist-hook: gen-ChangeLog
 .PHONY: gen-ChangeLog
 gen-ChangeLog:
 	$(AM_V_GEN)if test -d .git; then			\
-		git log >| $(distdir)/cl-t &&			\
+		git log --abbrev-commit --pretty=oneline --graph >| $(distdir)/cl-t &&	\
 		{ rm -f $(distdir)/ChangeLog &&			\
 		  mv $(distdir)/cl-t $(distdir)/ChangeLog ; }	\
 	fi
