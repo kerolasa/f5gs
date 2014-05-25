@@ -72,6 +72,7 @@ include tests/Makemodule.am
 
 extrasdir = $(datadir)/@PACKAGE@
 dist_extras_SCRIPTS = contrib/pre-script
+dist_extras_DATA = ChangeLog
 
 dist-hook: gen-ChangeLog
 .PHONY: gen-ChangeLog
