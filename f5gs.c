@@ -553,7 +553,7 @@ static char *get_server_status(struct runtime_config *rtc)
 
 static int set_server_status(struct runtime_config *rtc)
 {
-	char *username, *sudo_user, buf[256];
+	char *username, *sudo_user;
 	pid_t pid;
 	FILE *pidfd;
 
@@ -564,7 +564,8 @@ static int set_server_status(struct runtime_config *rtc)
 #ifndef HAVE_LIBSYSTEMD
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 #endif
-	if (close_stream(pidfd))
+	if (close_stream(pidfd)) {
+		char buf[255];
 #ifdef HAVE_LIBSYSTEMD
 		if (strerror_r(errno, buf, sizeof(buf)))
 			sd_journal_send("MESSAGE=closing %s failed", rtc->pid_file, "MESSAGE_ID=%s",
@@ -574,6 +575,7 @@ static int set_server_status(struct runtime_config *rtc)
 		if (strerror_r(errno, buf, sizeof(buf)))
 			syslog(LOG_ERR, "close failed: %s: %s", rtc->pid_file, buf);
 #endif
+	}
 	if (change_state(rtc, pid))
 		errx(EXIT_FAILURE, "aborting action, consider running with --no-scripts");
 	username = getenv("USER");
