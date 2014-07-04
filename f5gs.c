@@ -551,6 +551,21 @@ static char *get_server_status(struct runtime_config *rtc)
 	return buf;
 }
 
+static char *getenv_str(const char *name)
+{
+	const char *temp = getenv(name);
+	char *tmpvar;
+
+	if (temp != NULL) {
+		tmpvar = xmalloc(strlen(temp) + 1);
+		strcpy(tmpvar, temp);
+	} else {
+		tmpvar = xmalloc(strlen("NULL") + 1);
+		strcpy(tmpvar, "NULL");
+	}
+	return tmpvar;
+}
+
 static int set_server_status(struct runtime_config *rtc)
 {
 	char *username, *sudo_user;
@@ -578,8 +593,8 @@ static int set_server_status(struct runtime_config *rtc)
 	}
 	if (change_state(rtc, pid))
 		errx(EXIT_FAILURE, "aborting action, consider running with --no-scripts");
-	username = getenv("USER");
-	sudo_user = getenv("SUDO_USER");
+	username = getenv_str("USER");
+	sudo_user = getenv_str("SUDO_USER");
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=signal was sent", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "USER=%s",
 			username, "SUDO_USER=%s", sudo_user, "PRIORITY=%d", LOG_INFO, NULL);
@@ -587,6 +602,8 @@ static int set_server_status(struct runtime_config *rtc)
 	syslog(LOG_INFO, "signal was sent by USER: %s SUDO_USER: %s", username, sudo_user);
 	closelog();
 #endif
+	free(username);
+	free(sudo_user);
 	return EXIT_SUCCESS;
 }
 
