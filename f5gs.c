@@ -123,9 +123,8 @@ static void __attribute__ ((__noreturn__))
 	va_start(args, msg);
 	if (vasprintf(&s, msg, args) < 0)
 		goto fail;
-	if (rtc->run_foreground) {
+	if (rtc->run_foreground)
 		err(EXIT_FAILURE, "%s", s);
-	}
 #ifdef HAVE_LIBSYSTEMD
 	if (strerror_r(errno, buf, sizeof(buf)))
 		sd_journal_send("MESSAGE=%s", s, "STRERROR=%s", buf, "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
@@ -296,7 +295,7 @@ static void *state_change_thread(void *arg)
 						SD_ID128_CONST_STR(MESSAGE_ERROR), "STRERROR=%s", ebuf, "PRIORITY=%d",
 						LOG_ERR, NULL);
 #else
-			syslog(LOG_ERR, "could not get state change lock");
+			syslog(LOG_ERR, "receiving ipc message failed");
 #endif
 			continue;
 		}
@@ -332,7 +331,7 @@ static void *state_change_thread(void *arg)
 				state_message[buf.nstate], "MESSAGE_ID=%s",
 				SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO, NULL);
 #else
-		syslog(LOG_INFO, "signal received" ", state %s -> %s", state_message[rtc->state_code],
+		syslog(LOG_INFO, "state change received" ", state %s -> %s", state_message[rtc->state_code],
 		       state_message[buf.nstate]);
 #endif
 		rtc->state_code = buf.nstate;
@@ -483,7 +482,7 @@ static int change_state(struct runtime_config *rtc)
 	if (run_script(rtc, F5GS_PRE))
 		return 1;
 	if ((rtc->ipc_key = ftok(rtc->pid_file, IPC_MSG_ID)) < 0)
-		err(EXIT_FAILURE, "ftok failed");
+		errx(EXIT_FAILURE, "is f5gs server process running?");
 	if ((qid = msgget(rtc->ipc_key, 0600)) < 0)
 		err(EXIT_FAILURE, "ipc shmid missing: %d", qid);
 	if (msgsnd(qid, (void *)&buf, sizeof(buf.nstate), 0) != 0)
@@ -538,11 +537,11 @@ static int set_server_status(struct runtime_config *rtc)
 	username = getenv_str("USER");
 	sudo_user = getenv_str("SUDO_USER");
 #ifdef HAVE_LIBSYSTEMD
-	sd_journal_send("MESSAGE=signal was sent", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "USER=%s",
+	sd_journal_send("MESSAGE=state change was sent", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "USER=%s",
 			username, "SUDO_USER=%s", sudo_user, "PRIORITY=%d", LOG_INFO, NULL);
 #else
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
-	syslog(LOG_INFO, "signal was sent by USER: %s SUDO_USER: %s", username, sudo_user);
+	syslog(LOG_INFO, "state change was sent by USER: %s SUDO_USER: %s", username, sudo_user);
 	closelog();
 #endif
 	free(username);

@@ -25,13 +25,11 @@ responses:
 .IR enable ,
 or
 .IR unknown .
-The response is set by sending a signal to the
-.B f5gs
-deamon, or using the command to send signal, see options for details.
 Run state is wrote to a file, where it is retrieved at daemon start up.
-First number in run state file is pid of the daemon.  Run states are
-wrote to a directory that can contain multiple files.  The files are
-identified by listen address and tcp port.  This allows having several
+First number in run state file is pid of the daemon, second is a internal
+state code, and third the file format version.  Run states are wrote to a
+directory that can contain multiple files.  The files are identified by
+listen address and tcp port.  This allows having several
 .B f5gs
 instances running in same server.
 .PP
@@ -53,17 +51,14 @@ health check submission, so that debugging with tcpdump is easy.
 .TP
 \fB\-d\fR, \fB\-\-disable\fR
 Disable the health check.  This will stop new connections to arrive, and
-shut old connections immediately.  Same can be achieved by sending
-SIGUSR1 to the daemon.
+shut old connections immediately.
 .TP
 \fB\-m\fR, \fB\-\-maintenance\fR
 Use health check to quiesce connections.  This will stop new connections
-to arrive, while the existing connections are served.  Same can be
-achieved by sending SIGUSR2 to the daemon.
+to arrive, while the existing connections are served.
 .TP
 \fB\-e\fR, \fB\-\-enable\fR
-Enable health check.  This will set the service to normal operational state,
-Same can be achieved by sending SIGHUP to the daemon.
+Enable health check.  This will set the service to normal operational state.
 .TP
 \fB\-s\fR, \fB\-\-server\fR
 Start the health check daemon.  The daemon tries to find old service
@@ -161,8 +156,8 @@ License" or "FreeBSD License".
 .SH FILES
 .TP
 .B @f5gs_pre@
-An executable that is ran before state change signal is sent.  If a
-return value of the executable is not success
+An executable that is ran before state change is sent.  If a return value
+of the executable is not success
 .RB ( 0 )
 the state change is cancelled.  The executable will receive same command
 line options and arguments as the original
@@ -172,8 +167,8 @@ See
 for an example how to write a srcipt like this.
 .TP
 .B @f5gs_post@
-An executable that is ran after state change signal is sent.  Return
-value of the executable is ignored.  For the rest see pre script above.
+An executable that is ran after state change is sent.  Return value of
+the executable is ignored.  For the rest see pre script above.
 .BR f5gs .
 .TP
 .B @f5gs_rundir@
