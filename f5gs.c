@@ -248,7 +248,6 @@ static void read_status_from_file(struct runtime_config *rtc)
  err:
 		rtc->state_code = STATE_UNKNOWN;
 	}
-	rtc->message_lenght = strlen(state_message[rtc->state_code]);
 	if (pidfd)
 		fclose(pidfd);
 }
