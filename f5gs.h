@@ -8,6 +8,7 @@
 
 enum {
 	STATE_FILE_VERSION = 0,
+	IPC_MSG_ID = 1,
 	IGNORE_BYTES = 256
 };
 
@@ -19,30 +20,11 @@ enum {
 	STATE_UNKNOWN
 };
 
-/* Remember to update manual page if you change signal(s). */
-enum {
-	SIG_ENABLE = SIGHUP,
-	SIG_MAINTENANCE = SIGUSR1,
-	SIG_DISABLE = SIGUSR2
-};
-
 static const char *state_message[] = {
 	[STATE_ENABLE] = "enable",
 	[STATE_MAINTENANCE] = "maintenance",
 	[STATE_DISABLE] = "disable",
 	[STATE_UNKNOWN] = "unknown"
-};
-
-static const int state_signal[] = {
-	[STATE_ENABLE] = SIG_ENABLE,
-	[STATE_MAINTENANCE] = SIG_MAINTENANCE,
-	[STATE_DISABLE] = SIG_DISABLE
-};
-
-static const int signal_state[] = {
-	[SIG_ENABLE] = STATE_ENABLE,
-	[SIG_MAINTENANCE] = STATE_MAINTENANCE,
-	[SIG_DISABLE] = STATE_DISABLE
 };
 
 struct runtime_config {
@@ -54,7 +36,8 @@ struct runtime_config {
 	char *state_dir;
 	char *pid_file;
 	char **argv;
-	int client_signal;
+	int new_state;
+	key_t ipc_key;
 	unsigned int no_scripts:1,
 		     run_foreground:1,
 		     quiet:1;
@@ -65,19 +48,12 @@ static void __attribute__ ((__noreturn__)) faillog(struct runtime_config *rtc, c
 static void *handle_request(void *voidsocket);
 static char *construct_pid_file(struct runtime_config *rtc);
 static int update_pid_file(struct runtime_config *rtc);
-#ifdef HAVE_SIGNALFD
-static void catch_signals(struct signalfd_siginfo *info);
-#else
-static void catch_signals(int signal);
-#endif
 static void read_status_from_file(struct runtime_config *rtc);
 static void daemonize(void);
-static void *signal_handler_thread(void *arg);
-static void setup_signal_handling(void);
-static void stop_server(int sig __attribute__ ((__unused__)));
+static void stop_server(int sig);
 static void run_server(struct runtime_config *rtc);
 static int run_script(struct runtime_config *rtc, char *script);
-static int change_state(struct runtime_config *rtc, pid_t pid);
+static int change_state(struct runtime_config *rtc);
 static char *get_server_status(struct runtime_config *rtc);
 static int set_server_status(struct runtime_config *rtc);
 
