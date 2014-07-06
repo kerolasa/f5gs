@@ -81,11 +81,6 @@ static struct runtime_config rtc;
 volatile sig_atomic_t daemon_running;
 pthread_t stch_thread;
 
-struct state_change_msg {
-	long mtype;
-	int nstate;
-};
-
 /* keep functions in the order that allows skipping the function
  * definition lines */
 static void __attribute__ ((__noreturn__))

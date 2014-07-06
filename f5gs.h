@@ -43,6 +43,11 @@ struct runtime_config {
 		     quiet:1;
 };
 
+struct state_change_msg {
+	long mtype;
+	int nstate;
+};
+
 static void __attribute__ ((__noreturn__)) usage(FILE *out);
 static void __attribute__ ((__noreturn__)) faillog(struct runtime_config *rtc, char *msg, ...);
 static void *handle_request(void *voidsocket);
