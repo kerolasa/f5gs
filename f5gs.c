@@ -53,6 +53,7 @@
 #include <sys/msg.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <syslog.h>
@@ -98,6 +99,8 @@ static void __attribute__ ((__noreturn__))
 	fprintf(out, " -p, --port <port>    health check tcp port (default: %s)\n", PORT_NUM);
 	fprintf(out, "     --state <dir>    path of the state dir (default: %s)\n", F5GS_RUNDIR);
 	fputs(" -q, --quiet          do not print status, use exit values for states\n", out);
+	fputs("     --reason <text>  add explanation to status change\n", out);
+	fputs("     --why            query reason, and when status has changed\n", out);
 	fputs("     --no-scripts     do not run pre or post scripts\n", out);
 	fputs("     --foreground     do not run as daemon process\n", out);
 	fputs("\n", out);
@@ -148,9 +151,27 @@ static void __attribute__ ((__noreturn__))
 	/* let the client send, and ignore */
 	timeout.tv_sec = 1;
 	timeout.tv_usec = 0;
+	in_buf[0] = '\0';
 	if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed\n");
 	recv(sock, in_buf, sizeof(in_buf), 0);
+	if (!strcmp(in_buf, WHYWHEN)) {
+		char explanation[1 + 34 + 1 + MAX_REASON + 1];
+		char *p = explanation;
+		time_t prev_c;
+
+		prev_c = rtc.previous_change.tv_sec;
+		*p = '\n';
+		p++;
+		strftime(p, 34, "%Y-%m-%dT%H:%M:%S", localtime(&prev_c));
+		p += strlen(p);
+		snprintf(p, 34, ",%06d", (int)rtc.previous_change.tv_usec);
+		p += strlen(p);
+		strftime(p, 34, "%z ", localtime(&prev_c));
+		p += strlen(p);
+		strcpy(p, rtc.current_reason);
+		send(sock, explanation, strlen(explanation), 0);
+	}
 	close(sock);
 	free(voidsocket);
 	pthread_exit(NULL);
@@ -281,7 +302,7 @@ static void *state_change_thread(void *arg)
 	if ((msqid = msgget(rtc->ipc_key, 0600 | IPC_CREAT)) == -1)
 		faillog(rtc, "could not create message queue");
 	while (daemon_running) {
-		if (msgrcv(msqid, &buf, sizeof(buf.nstate), IPC_MSG_ID, 0) == -1) {
+		if (msgrcv(msqid, &buf, sizeof(buf.info), IPC_MSG_ID, 0) == -1) {
 #ifdef HAVE_LIBSYSTEMD
 			char ebuf[256];
 			if (strerror_r(errno, ebuf, sizeof(ebuf)))
@@ -293,18 +314,18 @@ static void *state_change_thread(void *arg)
 #endif
 			continue;
 		}
-		switch (buf.nstate) {
+		switch (buf.info.nstate) {
 		case STATE_ENABLE:
 		case STATE_MAINTENANCE:
 		case STATE_DISABLE:
 			break;
 		default:
 #ifdef HAVE_LIBSYSTEMD
-			sd_journal_send("MESSAGE=unknown state change: %d", buf.nstate,
+			sd_journal_send("MESSAGE=unknown state change: %d", buf.info.nstate,
 					"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR), "PRIORITY=%d", LOG_ERR,
 					NULL);
 #else
-			syslog(LOG_INFO, "unknown state change: %d", buf.nstate);
+			syslog(LOG_INFO, "unknown state change: %d", buf.info.nstate);
 #endif
 			continue;
 		}
@@ -322,14 +343,16 @@ static void *state_change_thread(void *arg)
 		}
 #ifdef HAVE_LIBSYSTEMD
 		sd_journal_send("MESSAGE=state change %s -> %s", state_message[rtc->state_code],
-				state_message[buf.nstate], "MESSAGE_ID=%s",
+				state_message[buf.info.nstate], "MESSAGE_ID=%s",
 				SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO, NULL);
 #else
 		syslog(LOG_INFO, "state change received" ", state %s -> %s", state_message[rtc->state_code],
-		       state_message[buf.nstate]);
+		       state_message[buf.info.nstate]);
 #endif
-		rtc->state_code = buf.nstate;
+		rtc->state_code = buf.info.nstate;
 		rtc->message_lenght = strlen(state_message[rtc->state_code]);
+		strcpy(rtc->current_reason, buf.info.reason);
+		gettimeofday(&rtc->previous_change, NULL);
 		update_pid_file(rtc);
 		pthread_rwlock_unlock(&rtc->lock);
 	}
@@ -395,6 +418,9 @@ static void run_server(struct runtime_config *rtc)
 
 	if (!rtc->run_foreground)
 		daemonize();
+
+	gettimeofday(&rtc->previous_change, NULL);
+	strcpy(rtc->current_reason, "<program started>");
 
 	if (update_pid_file(rtc))
 		faillog(rtc, "cannot write pid file %s", rtc->pid_file);
@@ -469,17 +495,21 @@ static int change_state(struct runtime_config *rtc)
 {
 	struct state_change_msg buf = {
 		.mtype = IPC_MSG_ID,
-		.nstate = rtc->new_state
 	};
 	int qid;
 
+	buf.info.nstate = rtc->new_state;
+	if (rtc->new_reason)
+		memcpy(buf.info.reason, rtc->new_reason, strlen(rtc->new_reason) + 1);
+	else
+		buf.info.reason[0] = '\0';
 	if (run_script(rtc, F5GS_PRE))
 		return 1;
 	if ((rtc->ipc_key = ftok(rtc->pid_file, IPC_MSG_ID)) < 0)
 		errx(EXIT_FAILURE, "is f5gs server process running?");
 	if ((qid = msgget(rtc->ipc_key, 0600)) < 0)
 		err(EXIT_FAILURE, "ipc shmid missing: %d", qid);
-	if (msgsnd(qid, (void *)&buf, sizeof(buf.nstate), 0) != 0)
+	if (msgsnd(qid, (void *)&buf, sizeof(buf.info), 0) != 0)
 		err(EXIT_FAILURE, "ipc message sending failed");
 	run_script(rtc, F5GS_POST);
 	return 0;
@@ -488,7 +518,7 @@ static int change_state(struct runtime_config *rtc)
 static char *get_server_status(struct runtime_config *rtc)
 {
 	int sfd;
-	static char buf[sizeof(state_message)];
+	static char buf[sizeof(state_message) + MAX_REASON];
 
 	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol))) {
 		if (rtc->quiet)
@@ -502,7 +532,13 @@ static char *get_server_status(struct runtime_config *rtc)
 		else
 			err(EXIT_FAILURE, "cannot connect");
 	}
-	if (read(sfd, buf, sizeof(state_message)) < 0)
+	if (rtc->why) {
+		send(sfd, WHYWHEN, sizeof(WHYWHEN), 0);
+		/* this gives handle_request() time to write both status
+		 * and reason to socket */
+		usleep(1000);
+	}
+	if (recv(sfd, buf, sizeof(state_message) + MAX_REASON, 0) < 0)
 		err(EXIT_FAILURE, "reading socket failed");
 	return buf;
 }
@@ -551,6 +587,8 @@ int main(int argc, char **argv)
 	int e;
 	enum {
 		STATEDIR_OPT = CHAR_MAX + 1,
+		REASON_OPT,
+		WHY_OPT,
 		NO_SCRIPTS_OPT,
 		FOREGROUND_OPT
 	};
@@ -564,6 +602,8 @@ int main(int argc, char **argv)
 		{"port", required_argument, NULL, 'p'},
 		{"state", required_argument, NULL, STATEDIR_OPT},
 		{"quiet", no_argument, NULL, 'q'},
+		{"reason", required_argument, NULL, REASON_OPT},
+		{"why", no_argument, NULL, WHY_OPT},
 		{"no-scripts", no_argument, NULL, NO_SCRIPTS_OPT},
 		{"foreground", no_argument, NULL, FOREGROUND_OPT},
 		{"version", no_argument, NULL, 'V'},
@@ -604,6 +644,16 @@ int main(int argc, char **argv)
 			break;
 		case 'q':
 			rtc.quiet = 1;
+			break;
+		case REASON_OPT:
+			if (MAX_REASON < strlen(optarg)) {
+				warnx("too long reason, truncating to %d characters", MAX_REASON);
+				optarg[MAX_REASON] = '\0';
+			}
+			rtc.new_reason = optarg;
+			break;
+		case WHY_OPT:
+			rtc.why = 1;
 			break;
 		case NO_SCRIPTS_OPT:
 			rtc.no_scripts = 1;

@@ -6,9 +6,15 @@
 # define MESSAGE_STATE_CHANGE	SD_ID128_MAKE(74,60,5f,27,15,d3,4b,01,8a,2c,61,c3,7a,99,4c,7b)
 # define MESSAGE_STOP_START	SD_ID128_MAKE(f5,eb,95,b2,81,7e,46,69,a8,cc,40,ea,83,94,11,b3)
 
+# define WHYWHEN "info:0"
+
 enum {
 	STATE_FILE_VERSION = 0,
 	IPC_MSG_ID = 1,
+	IPC_CHANGE_STATE_MSG = 2,
+	IPC_REQUEST_INFO_MSG = 3,
+	IPC_ANSWER_INFO_MSG = 4,
+	MAX_REASON = 256,
 	IGNORE_BYTES = 256
 };
 
@@ -37,15 +43,25 @@ struct runtime_config {
 	char *pid_file;
 	char **argv;
 	int new_state;
+	char *new_reason;
+	char current_reason[MAX_REASON];
+	struct timeval previous_change;
 	key_t ipc_key;
-	unsigned int no_scripts:1,
+	unsigned int
+		     why:1,
+		     no_scripts:1,
 		     run_foreground:1,
 		     quiet:1;
 };
 
+struct state_info {
+	int nstate;
+	char reason[MAX_REASON];
+};
+
 struct state_change_msg {
 	long mtype;
-	int nstate;
+	struct state_info info;
 };
 
 static void __attribute__ ((__noreturn__)) usage(FILE *out);
