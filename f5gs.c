@@ -228,7 +228,8 @@ static int update_pid_file(struct runtime_config *rtc)
 #endif
 		return 1;
 	}
-	fprintf(fd, "%u %d %d", getpid(), rtc->state_code, STATE_FILE_VERSION);
+	fprintf(fd, "%u %d %d\n", getpid(), rtc->state_code, STATE_FILE_VERSION);
+	fprintf(fd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec, rtc->current_reason);
 	if (close_stream(fd)) {
 		if (strerror_r(errno, buf, sizeof(buf)))
 #ifdef HAVE_LIBSYSTEMD
@@ -254,6 +255,11 @@ static void read_status_from_file(struct runtime_config *rtc)
 		goto err;
 	if (version != STATE_FILE_VERSION)
 		goto err;
+	if (0 < version) {
+		fscanf(pidfd, "%ld.%ld:", &(rtc->previous_change.tv_sec),
+		       &(rtc->previous_change.tv_usec));
+		fgets(rtc->current_reason, sizeof(rtc->current_reason), pidfd);
+	}
 	switch (rtc->state_code) {
 	case STATE_DISABLE:
 	case STATE_MAINTENANCE:
@@ -418,9 +424,6 @@ static void run_server(struct runtime_config *rtc)
 
 	if (!rtc->run_foreground)
 		daemonize();
-
-	gettimeofday(&rtc->previous_change, NULL);
-	strcpy(rtc->current_reason, "<program started>");
 
 	if (update_pid_file(rtc))
 		faillog(rtc, "cannot write pid file %s", rtc->pid_file);
@@ -691,10 +694,9 @@ int main(int argc, char **argv)
 	rtc.pid_file = construct_pid_file(&rtc);
 
 	if (server) {
-		if (rtc.new_state != STATE_UNKNOWN)
-			rtc.state_code = rtc.new_state;
-		else
-			read_status_from_file(&rtc);
+		gettimeofday(&rtc.previous_change, NULL);
+		strcpy(rtc.current_reason, "<program started>");
+		read_status_from_file(&rtc);
 		rtc.message_lenght = strlen(state_message[rtc.state_code]);
 		if (update_pid_file(&rtc))
 			err(EXIT_FAILURE, "cannot write pid file: %s", rtc.pid_file);
