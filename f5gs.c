@@ -506,9 +506,9 @@ static int change_state(struct runtime_config *rtc)
 	if (run_script(rtc, F5GS_PRE))
 		return 1;
 	if ((rtc->ipc_key = ftok(rtc->pid_file, IPC_MSG_ID)) < 0)
-		errx(EXIT_FAILURE, "is f5gs server process running?");
+		errx(EXIT_FAILURE, "ftok: is f5gs server process running?");
 	if ((qid = msgget(rtc->ipc_key, 0600)) < 0)
-		err(EXIT_FAILURE, "ipc shmid missing: %d", qid);
+		err(EXIT_FAILURE, "ipc msgget");
 	if (msgsnd(qid, (void *)&buf, sizeof(buf.info), 0) != 0)
 		err(EXIT_FAILURE, "ipc message sending failed");
 	run_script(rtc, F5GS_POST);
