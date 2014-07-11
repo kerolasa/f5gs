@@ -256,9 +256,11 @@ static void read_status_from_file(struct runtime_config *rtc)
 	if (version != STATE_FILE_VERSION)
 		goto err;
 	if (0 < version) {
+		size_t len;
 		fscanf(pidfd, "%ld.%ld:", &(rtc->previous_change.tv_sec),
 		       &(rtc->previous_change.tv_usec));
-		fgets(rtc->current_reason, sizeof(rtc->current_reason), pidfd);
+		len = fread(rtc->current_reason, sizeof(char), sizeof(rtc->current_reason), pidfd);
+		rtc->current_reason[len] = '\0';
 	}
 	switch (rtc->state_code) {
 	case STATE_DISABLE:
