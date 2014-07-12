@@ -516,7 +516,7 @@ static int change_state(struct runtime_config *rtc)
 		buf.info.reason[0] = '\0';
 	if (run_script(rtc, F5GS_PRE))
 		return 1;
-	if ((rtc->ipc_key = ftok(rtc->pid_file, IPC_MSG_ID)) < 0)
+	if ((rtc->ipc_key = ftok(rtc->pid_file, buf.mtype)) < 0)
 		errx(EXIT_FAILURE, "ftok: is f5gs server process running?");
 	if ((qid = msgget(rtc->ipc_key, 0600)) < 0)
 		err(EXIT_FAILURE, "ipc msgget");
