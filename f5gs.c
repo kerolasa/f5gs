@@ -146,7 +146,7 @@ static void __attribute__ ((__noreturn__))
 
 	pthread_detach(pthread_self());
 	pthread_rwlock_rdlock(&rtc.lock);
-	send(sock, state_message[rtc.state_code], rtc.message_lenght, 0);
+	send(sock, state_message[rtc.current_state], rtc.message_lenght, 0);
 	pthread_rwlock_unlock(&rtc.lock);
 	/* wait a second if client wants more info */
 	timeout.tv_sec = 1;
@@ -213,7 +213,7 @@ static int update_pid_file(struct runtime_config *rtc)
 #endif
 		return 1;
 	}
-	fprintf(fd, "%u %d %d\n", getpid(), rtc->state_code, STATE_FILE_VERSION);
+	fprintf(fd, "%u %d %d\n", getpid(), rtc->current_state, STATE_FILE_VERSION);
 	fprintf(fd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec, rtc->current_reason + TIME_STAMP_LEN - 1);
 	if (close_stream(fd)) {
 		if (strerror_r(errno, buf, sizeof(buf)))
@@ -248,6 +248,13 @@ static void add_tstamp_to_reason(struct runtime_config *rtc)
 	strcpy(rtc->current_reason, explanation);
 }
 
+static int valid_state(int state)
+{
+	if (state < STATE_ENABLE || STATE_UNKNOWN < state)
+		return 0;
+	return 1;
+}
+
 static void read_status_from_file(struct runtime_config *rtc)
 {
 	FILE *pidfd;
@@ -255,29 +262,22 @@ static void read_status_from_file(struct runtime_config *rtc)
 
 	if (!(pidfd = fopen(rtc->pid_file, "r")))
 		goto err;
-	if (fscanf(pidfd, "%d %d %d", &ignored, &(rtc->state_code), &version) != 3)
+	if (fscanf(pidfd, "%d %d %d", &ignored, &(rtc->current_state), &version) != 3)
 		goto err;
-	if (version != STATE_FILE_VERSION)
+	if (version < 0 || STATE_FILE_VERSION < version)
 		goto err;
 	if (0 < version) {
 		size_t len;
-		fscanf(pidfd, "%ld.%ld:", &(rtc->previous_change.tv_sec),
-		       &(rtc->previous_change.tv_usec));
+		fscanf(pidfd, "%ld.%ld:", &(rtc->previous_change.tv_sec), &(rtc->previous_change.tv_usec));
 		len = fread(rtc->current_reason, sizeof(char), sizeof(rtc->current_reason), pidfd);
 		rtc->current_reason[len] = '\0';
 	}
-	switch (rtc->state_code) {
-	case STATE_DISABLE:
-	case STATE_MAINTENANCE:
-	case STATE_ENABLE:
-	case STATE_UNKNOWN:
-		break;
-	default:
+	if (!valid_state(rtc->current_state))
  err:
-		rtc->state_code = STATE_UNKNOWN;
-	}
+		rtc->current_state = STATE_UNKNOWN;
 	if (pidfd)
 		fclose(pidfd);
+	rtc->message_lenght = strlen(state_message[rtc->current_state]);
 }
 
 static void daemonize(void)
@@ -326,12 +326,7 @@ static void *state_change_thread(void *arg)
 #endif
 			continue;
 		}
-		switch (buf.info.nstate) {
-		case STATE_ENABLE:
-		case STATE_MAINTENANCE:
-		case STATE_DISABLE:
-			break;
-		default:
+		if (!valid_state(buf.info.nstate)) {
 #ifdef HAVE_LIBSYSTEMD
 			sd_journal_send("MESSAGE=unknown state change: %d", buf.info.nstate,
 					"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR), "PRIORITY=%d", LOG_ERR,
@@ -354,15 +349,15 @@ static void *state_change_thread(void *arg)
 			continue;
 		}
 #ifdef HAVE_LIBSYSTEMD
-		sd_journal_send("MESSAGE=state change %s -> %s", state_message[rtc->state_code],
+		sd_journal_send("MESSAGE=state change %s -> %s", state_message[rtc->current_state],
 				state_message[buf.info.nstate], "MESSAGE_ID=%s",
 				SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO, NULL);
 #else
-		syslog(LOG_INFO, "state change received" ", state %s -> %s", state_message[rtc->state_code],
+		syslog(LOG_INFO, "state change received" ", state %s -> %s", state_message[rtc->current_state],
 		       state_message[buf.info.nstate]);
 #endif
-		rtc->state_code = buf.info.nstate;
-		rtc->message_lenght = strlen(state_message[rtc->state_code]);
+		rtc->current_state = buf.info.nstate;
+		rtc->message_lenght = strlen(state_message[rtc->current_state]);
 		strcpy(rtc->current_reason, buf.info.reason);
 		gettimeofday(&rtc->previous_change, NULL);
 		add_tstamp_to_reason(rtc);
@@ -437,11 +432,11 @@ static void run_server(struct runtime_config *rtc)
 
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service started", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START), "STATE=%s",
-			state_message[rtc->state_code], "PRIORITY=%d", LOG_INFO, NULL);
+			state_message[rtc->current_state], "PRIORITY=%d", LOG_INFO, NULL);
 	sd_notify(0, "READY=1");
 #else
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
-	syslog(LOG_INFO, "started in state %s", state_message[rtc->state_code]);
+	syslog(LOG_INFO, "started in state %s", state_message[rtc->current_state]);
 #endif
 	daemon_running = 1;
 	if (pthread_create(&stch_thread, NULL, &state_change_thread, (void *)rtc))
@@ -706,7 +701,6 @@ int main(int argc, char **argv)
 		gettimeofday(&rtc.previous_change, NULL);
 		strcpy(rtc.current_reason, "<program started>");
 		read_status_from_file(&rtc);
-		rtc.message_lenght = strlen(state_message[rtc.state_code]);
 		add_tstamp_to_reason(&rtc);
 		if (update_pid_file(&rtc))
 			err(EXIT_FAILURE, "cannot write pid file: %s", rtc.pid_file);

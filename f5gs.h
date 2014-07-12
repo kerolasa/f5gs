@@ -17,12 +17,12 @@ enum {
 };
 
 /* Remember to update manual page if you change --quiet return value(s). */
-enum {
-	STATE_ENABLE = 0,
+typedef enum {
+	STATE_ENABLE = 0,	/* must have value 0, and first entry */
 	STATE_MAINTENANCE,
 	STATE_DISABLE,
-	STATE_UNKNOWN
-};
+	STATE_UNKNOWN		/* must be the last entry */
+} state_code;
 
 static const char *state_message[] = {
 	[STATE_ENABLE] = "enable",
@@ -35,12 +35,12 @@ struct runtime_config {
 	struct addrinfo *res;
 	int server_socket;
 	pthread_rwlock_t lock;
-	int state_code;
+	state_code current_state;
 	size_t message_lenght;
 	char *state_dir;
 	char *pid_file;
 	char **argv;
-	int new_state;
+	state_code new_state;
 	char *new_reason;
 	char current_reason[MAX_REASON];
 	struct timeval previous_change;
@@ -53,7 +53,7 @@ struct runtime_config {
 };
 
 struct state_info {
-	int nstate;
+	state_code nstate;
 	char reason[MAX_REASON];
 };
 
