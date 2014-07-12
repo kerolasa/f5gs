@@ -137,12 +137,23 @@ static void __attribute__ ((__noreturn__))
 	exit(EXIT_FAILURE);
 }
 
-static void __attribute__ ((__noreturn__))
-    *handle_request(void *voidsocket)
+int timeval_subtract(struct timeval *result, struct timeval *prev, struct timeval *now)
+{
+	result->tv_sec = now->tv_sec - prev->tv_sec;
+	/* Return 1 if result is negative. */
+	return result->tv_sec < 0;
+}
+
+static void __attribute__((__noreturn__)) *handle_request(void *voidsocket)
 {
 	int sock = *(int *)voidsocket;
-	char in_buf[IGNORE_BYTES];
+	char io_buf[IGNORE_BYTES];
 	struct timeval timeout;
+	enum {
+		SECONDS_IN_DAY = 86400,
+		SECONDS_IN_HOUR = 3600,
+		SECONDS_IN_MIN = 60
+	};
 
 	pthread_detach(pthread_self());
 	pthread_rwlock_rdlock(&rtc.lock);
@@ -151,12 +162,26 @@ static void __attribute__ ((__noreturn__))
 	/* wait a second if client wants more info */
 	timeout.tv_sec = 1;
 	timeout.tv_usec = 0;
-	in_buf[0] = '\0';
+	io_buf[0] = '\0';
 	if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed\n");
-	recv(sock, in_buf, sizeof(in_buf), 0);
-	if (!strcmp(in_buf, WHYWHEN))
+	recv(sock, io_buf, sizeof(io_buf), 0);
+	if (!strcmp(io_buf, WHYWHEN)) {
+		struct timeval now, delta;
+
 		send(sock, rtc.current_reason, strlen(rtc.current_reason), 0);
+		gettimeofday(&now, NULL);
+		if (timeval_subtract(&delta, &rtc.previous_change, &now))
+			/* time went backwards, ignore result */ ;
+		else {
+			sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld ago",
+				delta.tv_sec / SECONDS_IN_DAY,
+				delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
+				delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
+				delta.tv_sec % SECONDS_IN_MIN);
+			send(sock, io_buf, strlen(io_buf), 0);
+		}
+	}
 	close(sock);
 	free(voidsocket);
 	pthread_exit(NULL);
