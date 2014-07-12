@@ -82,7 +82,7 @@ AM_CONDITIONAL([HAVE_SYSTEMD], [test "x$have_systemd" = xyes])
 
 AC_ARG_WITH([systemdsystemunitdir],
 	AS_HELP_STRING([--with-systemdsystemunitdir=DIR], [directory for systemd service files]),
-	[], [with_systemdsystemunitdir=`$PKG_CONFIG --variable=systemdsystemunitdir systemd`])
+	[], [with_systemdsystemunitdir=$prefix/lib/systemd/system])
 AS_IF([test "x$with_systemdsystemunitdir" != "xno"], [
 	AC_SUBST([systemdsystemunitdir], [$with_systemdsystemunitdir])
 ])
