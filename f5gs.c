@@ -148,30 +148,15 @@ static void __attribute__ ((__noreturn__))
 	pthread_rwlock_rdlock(&rtc.lock);
 	send(sock, state_message[rtc.state_code], rtc.message_lenght, 0);
 	pthread_rwlock_unlock(&rtc.lock);
-	/* let the client send, and ignore */
+	/* wait a second if client wants more info */
 	timeout.tv_sec = 1;
 	timeout.tv_usec = 0;
 	in_buf[0] = '\0';
 	if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed\n");
 	recv(sock, in_buf, sizeof(in_buf), 0);
-	if (!strcmp(in_buf, WHYWHEN)) {
-		char explanation[1 + 34 + 1 + MAX_REASON + 1];
-		char *p = explanation;
-		time_t prev_c;
-
-		prev_c = rtc.previous_change.tv_sec;
-		*p = '\n';
-		p++;
-		strftime(p, 34, "%Y-%m-%dT%H:%M:%S", localtime(&prev_c));
-		p += strlen(p);
-		snprintf(p, 34, ",%06d", (int)rtc.previous_change.tv_usec);
-		p += strlen(p);
-		strftime(p, 34, "%z ", localtime(&prev_c));
-		p += strlen(p);
-		strcpy(p, rtc.current_reason);
-		send(sock, explanation, strlen(explanation), 0);
-	}
+	if (!strcmp(in_buf, WHYWHEN))
+		send(sock, rtc.current_reason, strlen(rtc.current_reason), 0);
 	close(sock);
 	free(voidsocket);
 	pthread_exit(NULL);
@@ -229,7 +214,7 @@ static int update_pid_file(struct runtime_config *rtc)
 		return 1;
 	}
 	fprintf(fd, "%u %d %d\n", getpid(), rtc->state_code, STATE_FILE_VERSION);
-	fprintf(fd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec, rtc->current_reason);
+	fprintf(fd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec, rtc->current_reason + TIME_STAMP_LEN - 1);
 	if (close_stream(fd)) {
 		if (strerror_r(errno, buf, sizeof(buf)))
 #ifdef HAVE_LIBSYSTEMD
@@ -242,6 +227,25 @@ static int update_pid_file(struct runtime_config *rtc)
 		return 1;
 	}
 	return 0;
+}
+
+static void add_tstamp_to_reason(struct runtime_config *rtc)
+{
+	char explanation[MAX_REASON];
+	char *p = explanation;
+	time_t prev_c;
+
+	prev_c = rtc->previous_change.tv_sec;
+	*p = '\n';
+	p++;
+	strftime(p, 20, "%Y-%m-%dT%H:%M:%S", localtime(&prev_c));
+	p += strlen(p);
+	snprintf(p, 7, ",%06d", (int)rtc->previous_change.tv_usec);
+	p += strlen(p);
+	strftime(p, 7, "%z ", localtime(&prev_c));
+	p += strlen(p);
+	strcpy(p, rtc->current_reason);
+	strcpy(rtc->current_reason, explanation);
 }
 
 static void read_status_from_file(struct runtime_config *rtc)
@@ -361,6 +365,7 @@ static void *state_change_thread(void *arg)
 		rtc->message_lenght = strlen(state_message[rtc->state_code]);
 		strcpy(rtc->current_reason, buf.info.reason);
 		gettimeofday(&rtc->previous_change, NULL);
+		add_tstamp_to_reason(rtc);
 		update_pid_file(rtc);
 		pthread_rwlock_unlock(&rtc->lock);
 	}
@@ -424,11 +429,12 @@ static void run_server(struct runtime_config *rtc)
 	if (pthread_rwlock_init(&rtc->lock, NULL))
 		err(EXIT_FAILURE, "cannot init read-write lock");
 
-	if (!rtc->run_foreground)
+	if (!rtc->run_foreground) {
 		daemonize();
+		if (update_pid_file(rtc))
+			faillog(rtc, "cannot write pid file %s", rtc->pid_file);
+	}
 
-	if (update_pid_file(rtc))
-		faillog(rtc, "cannot write pid file %s", rtc->pid_file);
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service started", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START), "STATE=%s",
 			state_message[rtc->state_code], "PRIORITY=%d", LOG_INFO, NULL);
@@ -651,9 +657,10 @@ int main(int argc, char **argv)
 			rtc.quiet = 1;
 			break;
 		case REASON_OPT:
-			if (MAX_REASON < strlen(optarg)) {
-				warnx("too long reason, truncating to %d characters", MAX_REASON);
-				optarg[MAX_REASON] = '\0';
+			if ((MAX_REASON - TIME_STAMP_LEN - 1) < strlen(optarg)) {
+				warnx("too long reason, truncating to %d characters",
+				      MAX_REASON - TIME_STAMP_LEN - 1);
+				optarg[MAX_REASON - TIME_STAMP_LEN - 1] = '\0';
 			}
 			rtc.new_reason = optarg;
 			break;
@@ -700,6 +707,7 @@ int main(int argc, char **argv)
 		strcpy(rtc.current_reason, "<program started>");
 		read_status_from_file(&rtc);
 		rtc.message_lenght = strlen(state_message[rtc.state_code]);
+		add_tstamp_to_reason(&rtc);
 		if (update_pid_file(&rtc))
 			err(EXIT_FAILURE, "cannot write pid file: %s", rtc.pid_file);
 		if (!(rtc.ipc_key = ftok(rtc.pid_file, IPC_MSG_ID)))
