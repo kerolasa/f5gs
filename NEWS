@@ -1,3 +1,36 @@
+2014-07-12
+	Release v0.5.  The systemd support is now enabled by default when
+	build has needed libraries.  Earlier --quiet option implied
+	--no-scripts option, which was a bug and now fixed.  The syslog
+	and journald messages are made to have similar content, so that
+	one can compare functionality in between system easier.  When
+	post-scripts fail such is no longer considered fatal.  Fix to
+	crash caused by missing state directory.  Thread safety
+	improvements.  Add ChangeLog to distributions, with content of
+	git shortlog.
+
+	Notable interface changes include deprecation of receiving
+	signals to change status.  Now daemon will exit if it receives
+	same signals earlier changed the state.  The state changes can be
+	done by sending IPC message, that is easiest with the command
+	itself.  Rationality of this interface change is that after using
+	this software for real it has become clear other software will
+	never send signals to this daemon.  Automatic state changes are
+	likely to use the command line interface, which means rather
+	messy signal catching can be replaced with a lot less problematic
+	IPC messaging.
+
+	Another interfece change is addition of --reason "message here"
+	and --why options, that persist over daemon restarts and server
+	boot.  The --why printout will include time stamp of when the
+	state change happen, and how long it has been since that time.
+	While the message is likely to be omitted by most of the users
+	the automatic time stamp is something I think has value.  Again
+	the actual use of the software has made it clear that sometimes
+	one wants to know what happen and when.  So who ever adds state
+	changes to scripts should always add --reason.  Otherwise
+	debugging is more annoying.
+
 2014-02-07
 	Release v0.4.  When ever a developer tells program is ready to
 	be used is is reasonable to doubt statement being somehow
