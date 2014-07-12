@@ -283,11 +283,11 @@ static int valid_state(int state)
 static void read_status_from_file(struct runtime_config *rtc)
 {
 	FILE *pidfd;
-	int ignored, version;
+	int ignored, state, version;
 
 	if (!(pidfd = fopen(rtc->pid_file, "r")))
 		goto err;
-	if (fscanf(pidfd, "%d %d %d", &ignored, &(rtc->current_state), &version) != 3)
+	if (fscanf(pidfd, "%d %d %d", &ignored, &state, &version) != 3)
 		goto err;
 	if (version < 0 || STATE_FILE_VERSION < version)
 		goto err;
@@ -297,7 +297,9 @@ static void read_status_from_file(struct runtime_config *rtc)
 		len = fread(rtc->current_reason, sizeof(char), sizeof(rtc->current_reason), pidfd);
 		rtc->current_reason[len] = '\0';
 	}
-	if (!valid_state(rtc->current_state))
+	if (valid_state(state))
+		rtc->current_state = (state_code) state;
+	else
  err:
 		rtc->current_state = STATE_UNKNOWN;
 	if (pidfd)
