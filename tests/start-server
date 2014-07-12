@@ -1,14 +1,8 @@
 #!/bin/bash
 
-testtmp=$(readlink -f $0)
-testdir=${testtmp%/*}
+. "${srcdir=.}/tests/init.sh"
 
-if [ ! -d $testdir/outputs ]; then
-	mkdir $testdir/outputs
-else
-	rm -f $testdir/outputs/127.0.0.1:19862
-fi
-
-f5gs --listen 127.0.0.1 --port 19862 --state $testdir/outputs --server
+rm -f "$state_dir/127.0.0.1:$tcp_port"
+f5gs --listen 127.0.0.1 --port $tcp_port --state "$state_dir" --server
 
 exit $?

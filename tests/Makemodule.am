@@ -1,4 +1,7 @@
-TESTS_ENVIRONMENT = top_srcdir=$(top_srcdir) PATH=$(top_builddir)$(PATH_SEPARATOR)$$PATH
+TESTS_ENVIRONMENT = \
+	abs_top_builddir=$(abs_top_builddir) \
+	top_srcdir=$(top_srcdir) \
+	PATH=$(top_builddir)$(PATH_SEPARATOR)$$PATH
 
 TESTS = \
 	tests/start-server \
@@ -9,10 +12,5 @@ TESTS = \
 	tests/stop-server
 
 EXTRA_DIST += \
-	tests/expected \
+	tests/init.sh \
 	$(TESTS)
-
-clean-local-tests:
-	rm -rf $(top_builddir)/tests/outputs
-
-CLEAN_LOCALS = clean-local-tests

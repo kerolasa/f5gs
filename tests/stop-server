@@ -1,8 +1,9 @@
 #!/bin/bash
 
-testtmp=$(readlink -f $0)
-testdir=${testtmp%/*}
+. "${srcdir=.}/tests/init.sh"
 
-read -ra state_array < $testdir/outputs/127.0.0.1\:19862
+read -ra state_array < "$state_dir/127.0.0.1:$tcp_port"
 kill -9 ${state_array[0]}
+rm -f "$state_dir/127.0.0.1:$tcp_port"
+
 exit $?
