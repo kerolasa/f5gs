@@ -11,6 +11,8 @@ AM_CPPFLAGS = \
 EXTRA_DIST = \
 	m4/gnulib-cache.m4 \
 	f5gs.8.in \
+	contrib/f5gs.service.in \
+	contrib/f5gs.socket.in \
 	contrib/init.redhat
 
 SUBDIRS = lib
@@ -61,9 +63,17 @@ CLEANFILES = f5gs.8
 
 if HAVE_SYSTEMD
 f5gs.service: contrib/f5gs.service.in
-	$(edit) contrib/f5gs.service.in >$@
+	@ rm -f $@ $@.tmp
+	$(AM_V_GEN) srcdir=''; \
+		test -f ./contrib/f5gs.service.in || srcdir=$(srcdir)/; \
+		$(edit) $${srcdir}contrib/f5gs.service.in >$@.tmp
+	@ mv $@.tmp $@
 f5gs.socket: contrib/f5gs.socket.in
-	$(edit) contrib/f5gs.socket.in >$@
+	@ rm -f $@ $@.tmp
+	$(AM_V_GEN) srcdir=''; \
+		test -f ./contrib/f5gs.socket.in || srcdir=$(srcdir)/; \
+		$(edit) $${srcdir}contrib/f5gs.service.in >$@.tmp
+	@ mv $@.tmp $@
 systemdsystemunit_DATA = f5gs.service f5gs.socket
 CLEANFILES += f5gs.service f5gs.socket
 endif
