@@ -45,6 +45,7 @@ endif
 
 edit = sed \
 	-e 's|@PACKAGE_BUGREPORT[@]|$(PACKAGE_BUGREPORT)|g' \
+	-e 's|@PACKAGE_BUILD_DATE[@]|$(PACKAGE_BUILD_DATE)|g' \
 	-e 's|@PACKAGE_MAINTAINER[@]|$(PACKAGE_MAINTAINER)|g' \
 	-e 's|@PACKAGE_STRING[@]|$(PACKAGE_STRING)|g' \
 	-e 's|@PACKAGE_URL[@]|$(PACKAGE_URL)|g' \

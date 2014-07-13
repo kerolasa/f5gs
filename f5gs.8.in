@@ -1,6 +1,6 @@
 .\"
 .\" Please read 'man 7 groff_man' howto use various macros.
-.TH F5GS "8" "2014-07-13" "@PACKAGE_STRING@" "System Administration"
+.TH F5GS "8" "@PACKAGE_BUILD_DATE@" "@PACKAGE_STRING@" "System Administration"
 .SH NAME
 f5gs \- F5 graceful scaling helper daemon
 .SH SYNOPSIS

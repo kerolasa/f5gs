@@ -9,6 +9,8 @@ AC_INIT([f5gs],
 	[https://github.com/kerolasa/f5gs])
 PACKAGE_MAINTAINER="Sami Kerola"
 AC_SUBST([PACKAGE_MAINTAINER])
+PACKAGE_BUILD_DATE="$(date --iso)"
+AC_SUBST([PACKAGE_BUILD_DATE])
 AC_CONFIG_SRCDIR([f5gs.c])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -51,7 +53,6 @@ AC_TYPE_SSIZE_T
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([ \
 	clearenv \
-	signalfd \
 ])
 
 AC_ARG_WITH([systemd],
