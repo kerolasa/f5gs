@@ -36,7 +36,7 @@ struct runtime_config {
 	int server_socket;
 	pthread_rwlock_t lock;
 	state_code current_state;
-	size_t message_lenght;
+	size_t message_length;
 	char *state_dir;
 	char *pid_file;
 	char **argv;

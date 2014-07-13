@@ -157,7 +157,7 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidsocket)
 
 	pthread_detach(pthread_self());
 	pthread_rwlock_rdlock(&rtc.lock);
-	send(sock, state_message[rtc.current_state], rtc.message_lenght, 0);
+	send(sock, state_message[rtc.current_state], rtc.message_length, 0);
 	pthread_rwlock_unlock(&rtc.lock);
 	/* wait a second if client wants more info */
 	timeout.tv_sec = 1;
@@ -304,7 +304,7 @@ static void read_status_from_file(struct runtime_config *rtc)
 		rtc->current_state = STATE_UNKNOWN;
 	if (pidfd)
 		fclose(pidfd);
-	rtc->message_lenght = strlen(state_message[rtc->current_state]);
+	rtc->message_length = strlen(state_message[rtc->current_state]);
 }
 
 static void daemonize(void)
@@ -384,7 +384,7 @@ static void *state_change_thread(void *arg)
 		       state_message[buf.info.nstate]);
 #endif
 		rtc->current_state = buf.info.nstate;
-		rtc->message_lenght = strlen(state_message[rtc->current_state]);
+		rtc->message_length = strlen(state_message[rtc->current_state]);
 		strcpy(rtc->current_reason, buf.info.reason);
 		gettimeofday(&rtc->previous_change, NULL);
 		add_tstamp_to_reason(rtc);

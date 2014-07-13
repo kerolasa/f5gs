@@ -6,7 +6,7 @@
 #
 # ssh-gateway> for I in host{1..5}.example.net; do ssh $I f5gs -m; done
 #
-# If setuid is not desireable you may need sudo, with combination of
+# If setuid is not desirable you may need sudo, with combination of
 # requiretty turned off in sudoers configuration file.
 
 class f5gs {

@@ -70,7 +70,7 @@
 	that one can use to do additional tasks at a time of an event.
 	The reason why a script support was added is local installation
 	I am working with.  When a java service is put to maintenance
-	or disable state, e.g., F5 is told not to send trafic,
+	or disable state, e.g., F5 is told not to send traffic,
 	broadcast messaging from that java service has to be halted as
 	well.  The easiest way to do that is to add a iptables deny
 	rule for broadcasts, but I cannot possibly add such to the

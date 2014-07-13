@@ -37,10 +37,12 @@ Requires(preun): initscripts
 %{!?_initddir: %{expand: %%global _initddir %{_initrddir}}}
 
 %description
-This is a simple tcp daemon, which is intented to be used as a messanger
+This is a simple tcp daemon, which is intended to be used as a messenger
 from a server to a F5 load balancing switch.  One is expected to make a
 F5 switch to poll with a health check the f5gs daemon, that will tell the
-state of the service.
+status of the service.  Other external facilities, such as monitoring and
+automation, can be made to consume f5gs status making them to honor
+maintenance status if needed.
 
 %prep
 %setup -q
