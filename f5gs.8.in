@@ -1,20 +1,17 @@
 .\"
 .\" Please read 'man 7 groff_man' howto use various macros.
-.TH F5GS "8" "2013-10-13" "@PACKAGE_STRING@" "System Administration"
+.TH F5GS "8" "2014-07-13" "@PACKAGE_STRING@" "System Administration"
 .SH NAME
 f5gs \- F5 graceful scaling helper daemon
 .SH SYNOPSIS
 .B f5gs
 [options]
 .SH DESCRIPTION
-This daemon is intended to be used as an additional loadbalancer health
-check.  The loadbalancer has to have a away to add a health check in
-alternative port in order to use this too.  For example recent versions
-of F5 provide such functionality.  Health check answer from this command
-will be standalone in comparison to service that the health check is
-related to.  Idea is simply to provide easy to control daemon when
-indicating the service state with content of the backend service is
-difficult.
+In the beginning this daemon was thought to be only an additional health
+check for load balanced server to allow easy way to disable them from
+server side.  Later the scope of the software has changed, and the f5gs
+states are been seen as more generic expression of should the server
+receive traffic, be monitored, or be part of automation in general.
 .PP
 This daemon will listen a TCP port
 .BR @PORT_NUM@ .
@@ -26,27 +23,26 @@ responses:
 or
 .IR unknown .
 Run state is wrote to a file, where it is retrieved at daemon start up.
-First number in run state file is pid of the daemon, second is a internal
-state code, and third the file format version.  Run states are wrote to a
-directory that can contain multiple files.  The files are identified by
-listen address and tcp port.  This allows having several
+The run state files are wrote to a directory that can contain multiple
+files, identified by listen address and tcp port.  This allows having
+several
 .B f5gs
 instances running in same server.
 .PP
 The
 .I unknown
 cannot be set.  It stands for health check state that is never set.  From
-F5 point of view
+external observers point of view
 .I unknown
 and
 .I disable
-states are the same.
+states should be seen as the same.
 .PP
-The daemon will client for one second to submit something, and ignore
-first 256 bytes of the submission.  Any excess input does not get read,
-and will result to a socket error at the other end of the connection.
-The best idea is to use internal identifier, such as F5 host name, as
-health check submission, so that debugging with tcpdump is easy.
+The daemon will wait client for one second to submit something.  Almost
+any input is ignored, with exception of string
+.B info:1
+that makes server to send time stamp of most recent state change and
+reason if the previous change had one.
 .SH OPTIONS
 .TP
 \fB\-d\fR, \fB\-\-disable\fR
@@ -125,11 +121,17 @@ exit.
 \fB\-h\fR, \fB\-\-help\fR
 Display help and exit.
 .SH EXAMPLE
-f5gs --server
+f5gs \-\-server
 .br
-f5gs --enable
+f5gs \-\-enable
 .br
-echo hello | nc localhost @PORT_NUM@ ; echo
+f5gs
+.br
+f5gs \-\-quiet; echo $?
+.br
+echo hello | nc server.example.com @PORT_NUM@; echo
+.br
+f5gs \-\-why \-\-listen server.example.com
 .SH BUGS
 Please report to author if you find a bug.
 .PP
