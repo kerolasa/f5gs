@@ -36,8 +36,8 @@ usage() {
 }
 
 OPTION_DEFINITION=$(
-	getopt -o dmesl:p:qhV \
-		-l disable,maintenance,enable,server,listen:,port:,state:,quiet,reason,why,no-script,foreground,help,version \
+	getopt -o dmesa:p:qhV \
+		-l disable,maintenance,enable,server,address:,port:,statedir:,quiet,reason,why,no-script,foreground,help,version \
 		-n "$SCRIPT_INVOCATION_SHORT_NAME" -- "$@"
 )
 
@@ -62,7 +62,7 @@ while : ; do
 			# case.
 			shift
 			;;
-		-l|--listen)
+		-a|--address)
 			F5GS_LISTEN=$(getent hosts "$2" | awk '{print $1; exit 0}')
 			shift 2
 			;;
@@ -70,7 +70,7 @@ while : ; do
 			F5GS_PORT="$2"
 			shift 2
 			;;
-		--state)
+		--statedir)
 			# ignored for now, maybe there is a use for the
 			# value in future.  please send a patch if so.
 			#F5GS_STATEDIR="$2"
@@ -126,7 +126,7 @@ while : ; do
 done
 # All command line option related stuff is done.
 
-CURRENT_STATE=$(f5gs --listen $F5GS_LISTEN --port $F5GS_PORT | sed 's/^current status is: //')
+CURRENT_STATE=$(f5gs --address $F5GS_LISTEN --port $F5GS_PORT | sed 's/^current status is: //')
 if [ "$CURRENT_STATE" = "$F5GS_REQUESTED_STATE" ]; then
 	msg 'requested state is same as run state'
 	exit 1

@@ -4,4 +4,4 @@
 # check system local state before running a script
 * * * * * f5gs --quiet && /usr/local/bin/your_script.sh
 # check remote system state before sending a request there
-* * * * * f5gs --quiet --listen server.example.com && wget http://server.example.com
+* * * * * f5gs --quiet --address server.example.com && wget http://server.example.com

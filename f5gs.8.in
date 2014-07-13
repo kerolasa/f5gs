@@ -62,15 +62,16 @@ state file, and set the initial state to what is used to be.  If any of
 the state change options is used with \-\-service option the option will
 override contents of the old state file.
 .TP
-\fB\-l\fR, \fB\-\-listen\fR \fIaddress\fR
+\fB\-a\fR, \fB\-\-address\fR \fIaddress\fR
 Bind the server to
 .IR address .
 When the
 .I address
-is defined without \-\-server option status will be requested from that
+is defined without \-\-server option status will be requested from the
 .IR address .
-Address can be IP or a DNS name.  The default address is 0.\:0.\:0.\:0,
-that binds the server to all interface.
+Address can be IP or a DNS name.  The default address is
+.IR 0.\:0.\:0.\:0 ,
+that binds the server to all interface or send the request to localhost.
 .TP
 \fB\-p\fR, \fB\-\-port\fR \fIport\fR
 TCP
@@ -78,7 +79,7 @@ TCP
 of the server.  Default port is
 .IR @PORT_NUM@ .
 .TP
-\fB\-\-state\fR \fIdirectory\fR
+\fB\-\-statedir\fR \fIdirectory\fR
 Relocate the command
 .I state directory
 to elsewhere from
@@ -131,7 +132,7 @@ f5gs \-\-quiet; echo $?
 .br
 echo hello | nc server.example.com @PORT_NUM@; echo
 .br
-f5gs \-\-why \-\-listen server.example.com
+f5gs \-\-why \-\-address server.example.com
 .SH BUGS
 Please report to author if you find a bug.
 .PP

@@ -3,6 +3,6 @@
 . "${srcdir=.}/tests/init.sh"
 
 rm -f "$state_dir/127.0.0.1:$tcp_port"
-f5gs --listen 127.0.0.1 --port $tcp_port --state "$state_dir" --server
+f5gs --address 127.0.0.1 --port $tcp_port --statedir "$state_dir" --server
 
 exit $?

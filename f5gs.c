@@ -95,14 +95,14 @@ static void __attribute__ ((__noreturn__))
 	fputs(" -e, --enable         enable service\n", out);
 	fputs("\n", out);
 	fputs(" -s, --server         start up health check daemon\n", out);
-	fputs(" -l, --listen <addr>  ip address daemon will listen\n", out);
+	fputs(" -a, --address <addr> address (ip or name) daemon will listen\n", out);
 	fprintf(out, " -p, --port <port>    health check tcp port (default: %s)\n", PORT_NUM);
-	fprintf(out, "     --state <dir>    path of the state dir (default: %s)\n", F5GS_RUNDIR);
+	fprintf(out, "     --statedir <dir> path of the state dir (default: %s)\n", F5GS_RUNDIR);
+	fputs("     --foreground     do not run as daemon process\n", out);
 	fputs(" -q, --quiet          do not print status, use exit values for states\n", out);
 	fputs("     --reason <text>  add explanation to status change\n", out);
 	fputs("     --why            query reason, and when status has changed\n", out);
 	fputs("     --no-scripts     do not run pre or post scripts\n", out);
-	fputs("     --foreground     do not run as daemon process\n", out);
 	fputs("\n", out);
 	fputs(" -h, --help           display this help and exit\n", out);
 	fputs(" -V, --version        output version information and exit\n", out);
@@ -615,7 +615,7 @@ static int set_server_status(struct runtime_config *rtc)
 int main(int argc, char **argv)
 {
 	int c, server = 0, retval = EXIT_SUCCESS;
-	char *listen = NULL, *port = PORT_NUM;
+	char *address = NULL, *port = PORT_NUM;
 	struct addrinfo hints;
 	int e;
 	enum {
@@ -631,9 +631,10 @@ int main(int argc, char **argv)
 		{"maintenance", no_argument, NULL, 'm'},
 		{"enable", no_argument, NULL, 'e'},
 		{"server", no_argument, NULL, 's'},
+		{"address", required_argument, NULL, 'a'},
 		{"listen", required_argument, NULL, 'l'},
 		{"port", required_argument, NULL, 'p'},
-		{"state", required_argument, NULL, STATEDIR_OPT},
+		{"statedir", required_argument, NULL, STATEDIR_OPT},
 		{"quiet", no_argument, NULL, 'q'},
 		{"reason", required_argument, NULL, REASON_OPT},
 		{"why", no_argument, NULL, WHY_OPT},
@@ -652,7 +653,7 @@ int main(int argc, char **argv)
 	rtc.state_dir = F5GS_RUNDIR;
 	rtc.new_state = STATE_UNKNOWN;
 
-	while ((c = getopt_long(argc, argv, "dmesl:p:qVh", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "dmesa:l:p:qVh", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
 			rtc.new_state = STATE_DISABLE;
@@ -666,8 +667,10 @@ int main(int argc, char **argv)
 		case 's':
 			server = 1;
 			break;
-		case 'l':
-			listen = optarg;
+		case 'l':	/* FIXME: to be removed after 2015-08-01 */
+			warnx("--listen is deprecated, use --address instead");
+		case 'a':
+			address = optarg;
 			break;
 		case 'p':
 			port = optarg;
@@ -715,12 +718,12 @@ int main(int argc, char **argv)
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
-	e = getaddrinfo(listen, port, &hints, &rtc.res);
+	e = getaddrinfo(address, port, &hints, &rtc.res);
 	if (e) {
 		if (rtc.quiet)
 			exit(STATE_UNKNOWN);
 		else
-			errx(EXIT_FAILURE, "getaddrinfo: %s port %s: %s", listen, port, gai_strerror(e));
+			errx(EXIT_FAILURE, "getaddrinfo: %s port %s: %s", address, port, gai_strerror(e));
 	}
 	rtc.pid_file = construct_pid_file(&rtc);
 

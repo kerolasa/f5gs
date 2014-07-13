@@ -8,12 +8,12 @@ if [ "$testname" = 'unknown' ]; then
 else
 	opt_change="--$testname"
 fi
-f5gs --listen 127.0.0.1 --port $tcp_port --state "$state_dir" --no-scripts $opt_change > ./$testname.out 2>&1
+f5gs --address 127.0.0.1 --port $tcp_port --statedir "$state_dir" --no-scripts $opt_change > ./$testname.out 2>&1
 diff -u ./$testname.{exp,out}
 if [ $? -ne 0 ]; then retval=1; fi
 rm -f ./$testname.{exp,out}
 
-f5gs --listen 127.0.0.1 --port $tcp_port --state "$state_dir" --no-scripts --quiet 2>&1
+f5gs --address 127.0.0.1 --port $tcp_port --statedir "$state_dir" --no-scripts --quiet 2>&1
 if [ $? -ne ${testret[$testname]} ]; then retval=1; echo 'wrong return value'; fi
 
 exit $retval
