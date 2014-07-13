@@ -36,8 +36,8 @@ usage() {
 }
 
 OPTION_DEFINITION=$(
-	getopt -o dmesl:p:hV \
-		-l disable,maintenance,enable,server,listen:,port:,state:,help,version \
+	getopt -o dmesl:p:qhV \
+		-l disable,maintenance,enable,server,listen:,port:,state:,quiet,reason,why,no-script,foreground,help,version \
 		-n "$SCRIPT_INVOCATION_SHORT_NAME" -- "$@"
 )
 
@@ -76,6 +76,31 @@ while : ; do
 			#F5GS_STATEDIR="$2"
 			shift 2
 			;;
+		-q|--quiet)
+			# ignored for now, maybe there is a use for the
+			# value in future.  please send a patch if so.
+			shift 2
+			;;
+		--reason)
+			# ignored for now, maybe there is a use for the
+			# value in future.  please send a patch if so.
+			shift 2
+			;;
+		--why)
+			# this should be impossible, but ignore just in
+			# case.
+			shift 2
+			;;
+		--no-script)
+			# this should be impossible, but ignore just in
+			# case.
+			shift 2
+			;;
+		--foreground)
+			# this should be impossible, but ignore just in
+			# case.
+			shift 2
+			;;
 		-h|--help)
 			# this should be impossible, but ignore just in
 			# case.
@@ -111,6 +136,9 @@ set_iptables_rules() {
 	trap 'return 1' ERR
 	iptables -A INPUT -m pkttype --pkt-type multicast -j DROP
 	iptables -A OUTPUT -m pkttype --pkt-type multicast -j DROP
+	if [ -x /etc/init.d/iptables ]; then
+		/etc/init.d/iptables save
+	fi
 	return 0
 }
 
@@ -118,6 +146,9 @@ remove_iptables_rules() {
 	trap 'return 1' ERR
 	iptables -D INPUT -m pkttype --pkt-type multicast -j DROP
 	iptables -D OUTPUT -m pkttype --pkt-type multicast -j DROP
+	if [ -x /etc/init.d/iptables ]; then
+		/etc/init.d/iptables save
+	fi
 	return 0
 }
 
@@ -133,7 +164,7 @@ case "$CURRENT_STATE:$F5GS_REQUESTED_STATE" in
 		remove_iptables_rules
 		;;
 	*)
-		msg 'was this script ran by manually without state option?'
+		msg 'was this script ran manually without state change option?'
 		RETVAL=42
 		;;
 esac
