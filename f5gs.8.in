@@ -10,7 +10,7 @@ f5gs \- F5 graceful scaling helper daemon
 In the beginning this daemon was thought to be only an additional health
 check for load balanced server to allow easy way to disable them from
 server side.  Later the scope of the software has changed, and the f5gs
-states are been seen as more generic expression of should the server
+status are been seen as more generic expression of should the server
 receive traffic, be monitored, or be part of automation in general.
 .PP
 This daemon will listen a TCP port
@@ -22,8 +22,8 @@ responses:
 .IR enable ,
 or
 .IR unknown .
-Run state is wrote to a file, where it is retrieved at daemon start up.
-The run state files are wrote to a directory that can contain multiple
+Run status is wrote to a file, where it is retrieved at daemon start up.
+The run status files are wrote to a directory that can contain multiple
 files, identified by listen address and tcp port.  This allows having
 several
 .B f5gs
@@ -31,17 +31,17 @@ instances running in same server.
 .PP
 The
 .I unknown
-cannot be set.  It stands for health check state that is never set.  From
-external observers point of view
+cannot be set.  It stands for health check status that is never set.
+From external observers point of view
 .I unknown
 and
 .I disable
-states should be seen as the same.
+status should be seen as the same.
 .PP
 The daemon will wait client for one second to submit something.  Almost
 any input is ignored, with exception of string
 .B info:1
-that makes server to send time stamp of most recent state change and
+that makes server to send time stamp of most recent status change and
 reason if the previous change had one.
 .SH OPTIONS
 .TP
@@ -54,13 +54,14 @@ Use health check to quiesce connections.  This will stop new connections
 to arrive, while the existing connections are served.
 .TP
 \fB\-e\fR, \fB\-\-enable\fR
-Enable health check.  This will set the service to normal operational state.
+Enable health check.  This will set the service to normal operational
+status.
 .TP
 \fB\-s\fR, \fB\-\-server\fR
 Start the health check daemon.  The daemon tries to find old service
-state file, and set the initial state to what is used to be.  If any of
-the state change options is used with \-\-service option the option will
-override contents of the old state file.
+status file, and set the initial status to what is used to be.  If any of
+the status change options is used with \-\-service option the option will
+override contents of the old status file.
 .TP
 \fB\-a\fR, \fB\-\-address\fR \fIaddress\fR
 Bind the server to
@@ -80,14 +81,14 @@ of the server.  Default port is
 .IR @PORT_NUM@ .
 .TP
 \fB\-\-statedir\fR \fIdirectory\fR
-Relocate the command
-.I state directory
+Relocate the command status
+.I directory
 to elsewhere from
 .IR @f5gs_rundir@ .
 .TP
 \fB\-q\fR, \fB\-\-quiet\fR
 Do not print anything, but inform with an exit value below what is the
-state.  This option is applicable only when running in client mode, and
+status.  This option is applicable only when running in client mode, and
 is meant to be used in scripts.
 .PP
 .RS
@@ -103,12 +104,13 @@ maintenance
 disable
 .TP
 .B 3
-unknown, or an error while determining the state such as f5gs server not running
+unknown, or an error while determining the status such as f5gs server not
+running
 .PD
 .RE
 .TP
 \fB\-\-no\-scripts\fR
-Skip running pre or post scripts at state change.
+Skip running pre or post scripts at status change.
 .TP
 \fB\-\-foreground\fR
 Run server process in foreground with result an operator can see error
@@ -143,14 +145,14 @@ kill the process.
 .SH SYSTEMD INTEGRATION
 When compiled with systemd support the
 .B f5gs
-will use socket actication.  The message that usually are sent to
-syslog are using journald native integration.  Message ID fields that
-are in use are
+will use socket actication.  The message that usually are sent to syslog
+are using journald native integration.  Message ID fields that are in use
+are
 .TS
 tab(^);
 l l.
 e7237db848ae4091b5ce09b2ebb75944^errors^
-74605f2715d34b018a2c61c37a994c7b^state changes^
+74605f2715d34b018a2c61c37a994c7b^status changes^
 f5eb95b2817e4669a8cc40ea839411b3^stop or start^
 .TE
 .SH LICENSE
@@ -159,10 +161,10 @@ License" or "FreeBSD License".
 .SH FILES
 .TP
 .B @f5gs_pre@
-An executable that is ran before state change is sent.  If a return value
-of the executable is not success
+An executable that is ran before status change is sent.  If a return
+value of the executable is not success
 .RB ( 0 )
-the state change is cancelled.  The executable will receive same command
+the status change is cancelled.  The executable will receive same command
 line options and arguments as the original
 .BR f5gs .
 See
@@ -170,12 +172,12 @@ See
 for an example how to write a srcipt like this.
 .TP
 .B @f5gs_post@
-An executable that is ran after state change is sent.  Return value of
+An executable that is ran after status change is sent.  Return value of
 the executable is ignored.  For the rest see pre script above.
 .BR f5gs .
 .TP
 .B @f5gs_rundir@
-Location of the state files.
+Location of the status files.
 .SH ENVIRONMENT
 The
 .B f5gs
