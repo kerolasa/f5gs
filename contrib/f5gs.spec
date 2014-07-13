@@ -1,7 +1,7 @@
 # Wben building an rpm from random git revision create a tag
 # something like:
 #
-#	git tag -a v0.2
+#	git tag -a v0.5.1
 #
 # followed by
 #
@@ -14,7 +14,7 @@
 # rpmbuild --nodeps -ba contrib/f5gs.spec
 
 Name:		f5gs
-Version:	0.2
+Version:	0.5.1
 Release:	1
 Summary:	F5 Graceful Scaling helper daemon
 Group:		System Environment/Daemons
@@ -55,18 +55,19 @@ make %{?_smp_mflags}
 %{__install} -p -D -m 755 contrib/init.redhat %{buildroot}%{_initddir}/%{name}
 
 %post
-# Organizations that have working orchestration should remove post
-# installation, upgrade, and service status actions.
+
 if [ $1 -eq 1 ] ; then
 	# Install
 	/sbin/chkconfig --add %{name} || :
 	/sbin/service %{name} start >/dev/null 2>&1 || :
+	# In organizations where there is working orchestration the
+	# status change should probably be removed from this rpm spec.
+	if [ "$(%{name})" = 'current status is: unknown' ]; then
+		%{name} --enable --reason 'rpm post installation' >/dev/null 2>&1 || :
+	fi
 else
 	# Upgrade
 	/sbin/service %{name} restart >/dev/null 2>&1 || :
-fi
-if [ "$(%{name})" = 'current status is: unknown' ]; then
-	%{name} --enable >/dev/null 2>&1 || :
 fi
 
 %preun
@@ -93,6 +94,9 @@ rm -rf %{buildroot}
 %_datadir/%{name}/*
 
 %changelog
+* Sun Jul 13 2014  Sami Kerola <kerolasa@iki.fi>
+- add --reason to post script state change
+
 * Fri Apr 25 2014  Sami Kerola <kerolasa@iki.fi>
 - add ChangeLog to doc directory.
 

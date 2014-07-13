@@ -24,10 +24,9 @@ build() {
   cd "$srcdir/$pkgname"
   ./bootstrap
   ./configure \
-	--enable-systemd \
 	--prefix=/usr \
 	--bindir=/usr/bin \
-	--localstatedir=/
+	--localstatedir=/var
   make
 }
 
