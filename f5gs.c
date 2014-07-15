@@ -422,9 +422,9 @@ static void run_server(struct runtime_config *rtc)
 	struct sockaddr_in client_addr;
 	socklen_t addr_len;
 	pthread_attr_t attr;
+	struct sigaction sigact;
 #ifdef HAVE_LIBSYSTEMD
 	int ret;
-	struct sigaction sigact;
 
 	ret = sd_listen_fds(0);
 	if (1 < ret)
