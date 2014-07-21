@@ -37,7 +37,7 @@ usage() {
 
 OPTION_DEFINITION=$(
 	getopt -o dmesa:p:qhV \
-		-l disable,maintenance,enable,server,address:,port:,statedir:,quiet,reason,why,no-script,foreground,help,version \
+		-l disable,maintenance,enable,server,address:,port:,statedir:,quiet,reason:,why,no-script,foreground,help,version \
 		-n "$SCRIPT_INVOCATION_SHORT_NAME" -- "$@"
 )
 
@@ -79,7 +79,7 @@ while : ; do
 		-q|--quiet)
 			# ignored for now, maybe there is a use for the
 			# value in future.  please send a patch if so.
-			shift 2
+			shift
 			;;
 		--reason)
 			# ignored for now, maybe there is a use for the
@@ -89,17 +89,17 @@ while : ; do
 		--why)
 			# this should be impossible, but ignore just in
 			# case.
-			shift 2
+			shift
 			;;
 		--no-script)
 			# this should be impossible, but ignore just in
 			# case.
-			shift 2
+			shift
 			;;
 		--foreground)
 			# this should be impossible, but ignore just in
 			# case.
-			shift 2
+			shift
 			;;
 		-h|--help)
 			# this should be impossible, but ignore just in
@@ -132,22 +132,12 @@ if [ "$CURRENT_STATE" = "$F5GS_REQUESTED_STATE" ]; then
 	exit 1
 fi
 
-set_iptables_rules() {
+iptables_rules() {
 	trap 'return 1' ERR
-	iptables -A INPUT -m pkttype --pkt-type multicast -j DROP
-	iptables -A OUTPUT -m pkttype --pkt-type multicast -j DROP
+	iptables $1 INPUT -m pkttype --pkt-type multicast -j DROP
+	iptables $1 OUTPUT -m pkttype --pkt-type multicast -j DROP
 	if [ -x /etc/init.d/iptables ]; then
-		/etc/init.d/iptables save
-	fi
-	return 0
-}
-
-remove_iptables_rules() {
-	trap 'return 1' ERR
-	iptables -D INPUT -m pkttype --pkt-type multicast -j DROP
-	iptables -D OUTPUT -m pkttype --pkt-type multicast -j DROP
-	if [ -x /etc/init.d/iptables ]; then
-		/etc/init.d/iptables save
+		/etc/init.d/iptables save >/dev/null 2>&1
 	fi
 	return 0
 }
@@ -158,10 +148,10 @@ case "$CURRENT_STATE:$F5GS_REQUESTED_STATE" in
 		: # do nothing
 		;;
 	'enable:maintenance'|'enable:disable'|'unknown:disable'|'unknown:maintenance')
-		set_iptables_rules
+		iptables_rules -A
 		;;
 	'disable:enable'|'maintenance:enable')
-		remove_iptables_rules
+		iptables_rules -D
 		;;
 	*)
 		msg 'was this script ran manually without state change option?'
