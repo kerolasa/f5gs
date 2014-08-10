@@ -59,9 +59,9 @@
 #include <syslog.h>
 #include <unistd.h>
 
-#if HAVE_SYS_SOCKET_H
+#ifdef HAVE_SYS_SOCKET_H
 # include <sys/socket.h>
-#elif HAVE_WS2TCPIP_H
+#elif defined HAVE_WS2TCPIP_H
 # include <ws2tcpip.h>
 #endif
 
@@ -78,13 +78,13 @@
 #include "f5gs.h"
 
 /* global variables */
-static struct runtime_config rtc;
+static struct runtime_config *global_rtc;
 volatile sig_atomic_t daemon_running;
-pthread_t stch_thread;
+pthread_t chstate_thread;
 
 /* keep functions in the order that allows skipping the function
  * definition lines */
-static void __attribute__ ((__noreturn__))
+static void __attribute__((__noreturn__))
     usage(FILE *out)
 {
 	fputs("\nUsage:\n", out);
@@ -111,8 +111,8 @@ static void __attribute__ ((__noreturn__))
 	exit(out == stderr ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
-static void __attribute__ ((__noreturn__))
-    faillog(struct runtime_config *rtc, char *msg, ...)
+static void __attribute__((__noreturn__))
+    faillog(const struct runtime_config *rtc, const char *msg, ...)
 {
 	va_list args;
 	char *s;
@@ -156,9 +156,9 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidsocket)
 	};
 
 	pthread_detach(pthread_self());
-	pthread_rwlock_rdlock(&rtc.lock);
-	send(sock, state_message[rtc.current_state], rtc.message_length, 0);
-	pthread_rwlock_unlock(&rtc.lock);
+	pthread_rwlock_rdlock(&(global_rtc->lock));
+	send(sock, state_message[global_rtc->current_state], global_rtc->message_length, 0);
+	pthread_rwlock_unlock(&(global_rtc->lock));
 	/* wait a second if client wants more info */
 	timeout.tv_sec = 1;
 	timeout.tv_usec = 0;
@@ -169,9 +169,9 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidsocket)
 	if (!strcmp(io_buf, WHYWHEN)) {
 		struct timeval now, delta;
 
-		send(sock, rtc.current_reason, strlen(rtc.current_reason), 0);
+		send(sock, global_rtc->current_reason, strlen(global_rtc->current_reason), 0);
 		gettimeofday(&now, NULL);
-		if (timeval_subtract(&delta, &rtc.previous_change, &now))
+		if (timeval_subtract(&delta, &global_rtc->previous_change, &now))
 			/* time went backwards, ignore result */ ;
 		else {
 			sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld ago",
@@ -187,7 +187,7 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidsocket)
 	pthread_exit(NULL);
 }
 
-static char *construct_pid_file(struct runtime_config *rtc)
+static char *construct_pid_file(const struct runtime_config *rtc)
 {
 	char *path;
 	void *p;
@@ -219,7 +219,7 @@ static char *construct_pid_file(struct runtime_config *rtc)
 	return path;
 }
 
-static int update_pid_file(struct runtime_config *rtc)
+static int update_pid_file(const struct runtime_config *rtc)
 {
 	FILE *fd;
 	char buf[256];
@@ -239,7 +239,8 @@ static int update_pid_file(struct runtime_config *rtc)
 		return 1;
 	}
 	fprintf(fd, "%u %d %d\n", getpid(), rtc->current_state, STATE_FILE_VERSION);
-	fprintf(fd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec, rtc->current_reason + TIME_STAMP_LEN - 1);
+	fprintf(fd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec,
+		rtc->current_reason + TIME_STAMP_LEN - 1);
 	if (close_stream(fd)) {
 		if (strerror_r(errno, buf, sizeof(buf)))
 #ifdef HAVE_LIBSYSTEMD
@@ -273,7 +274,7 @@ static void add_tstamp_to_reason(struct runtime_config *rtc)
 	strcpy(rtc->current_reason, explanation);
 }
 
-static int valid_state(int state)
+static int valid_state(const int state)
 {
 	if (state < STATE_ENABLE || STATE_UNKNOWN < state)
 		return 0;
@@ -397,20 +398,20 @@ static void *state_change_thread(void *arg)
 	return NULL;
 }
 
-static void stop_server(int sig)
+static void stop_server(const int sig)
 {
 	int qid;
 
 	if (daemon_running == 0)
 		return;
 	daemon_running = 0;
-	pthread_rwlock_destroy(&(rtc.lock));
-	freeaddrinfo(rtc.res);
-	free(rtc.pid_file);
-	close(rtc.server_socket);
-	qid = msgget(rtc.ipc_key, 0600);
+	pthread_rwlock_destroy(&(global_rtc->lock));
+	freeaddrinfo(global_rtc->res);
+	free(global_rtc->pid_file);
+	close(global_rtc->server_socket);
+	qid = msgget(global_rtc->ipc_key, 0600);
 	msgctl(qid, IPC_RMID, NULL);
-	pthread_cancel(stch_thread);
+	pthread_cancel(chstate_thread);
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service stopped, signal %d", sig, "MESSAGE_ID=%s",
 			SD_ID128_CONST_STR(MESSAGE_STOP_START), "PRIORITY=%d", LOG_INFO, NULL);
@@ -459,7 +460,6 @@ static void run_server(struct runtime_config *rtc)
 		if (update_pid_file(rtc))
 			faillog(rtc, "cannot write pid file %s", rtc->pid_file);
 	}
-
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service started", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START), "STATE=%s",
 			state_message[rtc->current_state], "PRIORITY=%d", LOG_INFO, NULL);
@@ -469,7 +469,7 @@ static void run_server(struct runtime_config *rtc)
 	syslog(LOG_INFO, "started in state %s", state_message[rtc->current_state]);
 #endif
 	daemon_running = 1;
-	if (pthread_create(&stch_thread, NULL, &state_change_thread, (void *)rtc))
+	if (pthread_create(&chstate_thread, NULL, &state_change_thread, (void *)rtc))
 		err(EXIT_FAILURE, "could not start state changer thread");
 	/* clean up after receiving signal */
 	sigemptyset(&sigact.sa_mask);
@@ -492,7 +492,7 @@ static void run_server(struct runtime_config *rtc)
 	}
 }
 
-static int run_script(struct runtime_config *rtc, char *script)
+static int run_script(const struct runtime_config *rtc, const char *script)
 {
 	pid_t child;
 	int status = 0;
@@ -551,7 +551,7 @@ static int change_state(struct runtime_config *rtc)
 	return 0;
 }
 
-static char *get_server_status(struct runtime_config *rtc)
+static char *get_server_status(const struct runtime_config *rtc)
 {
 	int sfd;
 	static char buf[sizeof(state_message) + MAX_REASON];
@@ -579,7 +579,7 @@ static char *get_server_status(struct runtime_config *rtc)
 	return buf;
 }
 
-static char *getenv_str(const char *name)
+static char *getenv_str(const const char *name)
 {
 	const char *temp = getenv(name);
 	char *tmpvar;
@@ -603,8 +603,8 @@ static int set_server_status(struct runtime_config *rtc)
 	username = getenv_str("USER");
 	sudo_user = getenv_str("SUDO_USER");
 #ifdef HAVE_LIBSYSTEMD
-	sd_journal_send("MESSAGE=state change was sent", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "USER=%s",
-			username, "SUDO_USER=%s", sudo_user, "PRIORITY=%d", LOG_INFO, NULL);
+	sd_journal_send("MESSAGE=state change was sent", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE),
+			"USER=%s", username, "SUDO_USER=%s", sudo_user, "PRIORITY=%d", LOG_INFO, NULL);
 #else
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 	syslog(LOG_INFO, "state change was sent by USER: %s SUDO_USER: %s", username, sudo_user);
@@ -615,10 +615,11 @@ static int set_server_status(struct runtime_config *rtc)
 	return EXIT_SUCCESS;
 }
 
-int main(int argc, char **argv)
+int main(const int argc, char **argv)
 {
+	static struct runtime_config rtc;
 	int c, server = 0, retval = EXIT_SUCCESS;
-	char *address = NULL, *port = PORT_NUM;
+	const char *address = NULL, *port = PORT_NUM;
 	struct addrinfo hints;
 	int e;
 	enum {
@@ -655,6 +656,7 @@ int main(int argc, char **argv)
 	rtc.argv = argv;
 	rtc.state_dir = F5GS_RUNDIR;
 	rtc.new_state = STATE_UNKNOWN;
+	global_rtc = &rtc;
 
 	while ((c = getopt_long(argc, argv, "dmesa:l:p:qVh", longopts, NULL)) != -1) {
 		switch (c) {
@@ -686,8 +688,7 @@ int main(int argc, char **argv)
 			break;
 		case REASON_OPT:
 			if ((MAX_REASON - TIME_STAMP_LEN - 1) < strlen(optarg)) {
-				warnx("too long reason, truncating to %d characters",
-				      MAX_REASON - TIME_STAMP_LEN - 1);
+				warnx("too long reason, truncating to %d characters", MAX_REASON - TIME_STAMP_LEN - 1);
 				optarg[MAX_REASON - TIME_STAMP_LEN - 1] = '\0';
 			}
 			rtc.new_reason = optarg;
