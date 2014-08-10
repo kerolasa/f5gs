@@ -85,7 +85,7 @@ pthread_t chstate_thread;
 /* keep functions in the order that allows skipping the function
  * definition lines */
 static void __attribute__((__noreturn__))
-    usage(FILE *out)
+    usage(FILE *restrict out)
 {
 	fputs("\nUsage:\n", out);
 	fprintf(out, " %s [options]\n", program_invocation_short_name);
@@ -112,7 +112,7 @@ static void __attribute__((__noreturn__))
 }
 
 static void __attribute__((__noreturn__))
-    faillog(const struct runtime_config *rtc, const char *msg, ...)
+    faillog(const struct runtime_config *restrict rtc, const char *restrict msg, ...)
 {
 	va_list args;
 	char *s;
@@ -137,7 +137,7 @@ static void __attribute__((__noreturn__))
 	exit(EXIT_FAILURE);
 }
 
-int timeval_subtract(struct timeval *result, struct timeval *prev, struct timeval *now)
+int timeval_subtract(struct timeval *restrict result, struct timeval *restrict prev, struct timeval *restrict now)
 {
 	result->tv_sec = now->tv_sec - prev->tv_sec;
 	/* Return 1 if result is negative. */
@@ -187,7 +187,7 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidsocket)
 	pthread_exit(NULL);
 }
 
-static char *construct_pid_file(const struct runtime_config *rtc)
+static char *construct_pid_file(const struct runtime_config *restrict rtc)
 {
 	char *path;
 	void *p;
@@ -219,7 +219,7 @@ static char *construct_pid_file(const struct runtime_config *rtc)
 	return path;
 }
 
-static int update_pid_file(const struct runtime_config *rtc)
+static int update_pid_file(const struct runtime_config *restrict rtc)
 {
 	FILE *fd;
 	char buf[256];
@@ -255,7 +255,7 @@ static int update_pid_file(const struct runtime_config *rtc)
 	return 0;
 }
 
-static void add_tstamp_to_reason(struct runtime_config *rtc)
+static void add_tstamp_to_reason(struct runtime_config *restrict rtc)
 {
 	char explanation[MAX_REASON];
 	char *p = explanation;
@@ -281,7 +281,7 @@ static int valid_state(const int state)
 	return 1;
 }
 
-static void read_status_from_file(struct runtime_config *rtc)
+static void read_status_from_file(struct runtime_config *restrict rtc)
 {
 	FILE *pidfd;
 	int ignored, state, version;
@@ -421,7 +421,7 @@ static void stop_server(const int sig)
 #endif
 }
 
-static void run_server(struct runtime_config *rtc)
+static void run_server(struct runtime_config *restrict rtc)
 {
 	struct sockaddr_in client_addr;
 	socklen_t addr_len;
@@ -492,7 +492,7 @@ static void run_server(struct runtime_config *rtc)
 	}
 }
 
-static int run_script(const struct runtime_config *rtc, const char *script)
+static int run_script(const struct runtime_config *restrict rtc, const char *restrict script)
 {
 	pid_t child;
 	int status = 0;
@@ -527,7 +527,7 @@ static int run_script(const struct runtime_config *rtc, const char *script)
 	abort();
 }
 
-static int change_state(struct runtime_config *rtc)
+static int change_state(struct runtime_config *restrict rtc)
 {
 	struct state_change_msg buf = {
 		.mtype = IPC_MSG_ID,
@@ -551,7 +551,7 @@ static int change_state(struct runtime_config *rtc)
 	return 0;
 }
 
-static char *get_server_status(const struct runtime_config *rtc)
+static char *get_server_status(const struct runtime_config *restrict rtc)
 {
 	int sfd;
 	static char buf[sizeof(state_message) + MAX_REASON];
@@ -579,7 +579,7 @@ static char *get_server_status(const struct runtime_config *rtc)
 	return buf;
 }
 
-static char *getenv_str(const const char *name)
+static char *getenv_str(const const char *restrict name)
 {
 	const char *temp = getenv(name);
 	char *tmpvar;
@@ -594,7 +594,7 @@ static char *getenv_str(const const char *name)
 	return tmpvar;
 }
 
-static int set_server_status(struct runtime_config *rtc)
+static int set_server_status(struct runtime_config *restrict rtc)
 {
 	char *username, *sudo_user;
 
