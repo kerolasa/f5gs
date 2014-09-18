@@ -554,6 +554,7 @@ static int change_state(struct runtime_config *restrict rtc)
 static char *get_server_status(const struct runtime_config *restrict rtc)
 {
 	int sfd;
+	struct timeval timeout;
 	static char buf[sizeof(state_message) + MAX_REASON];
 
 	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol))) {
@@ -562,6 +563,10 @@ static char *get_server_status(const struct runtime_config *restrict rtc)
 		else
 			err(EXIT_FAILURE, "cannot create socket");
 	}
+	timeout.tv_sec = 1;
+	timeout.tv_usec = 0;
+	if (setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)))
+		err(EXIT_FAILURE, "setsockopt failed\n");
 	if (connect(sfd, rtc->res->ai_addr, rtc->res->ai_addrlen)) {
 		if (rtc->quiet)
 			exit(STATE_UNKNOWN);
