@@ -11,8 +11,8 @@ enum {
 	STATE_FILE_VERSION = 1,
 	IPC_MSG_ID = 1,
 	TIME_STAMP_LEN = 33,
-	MAX_REASON = TIME_STAMP_LEN + 255,
-	IGNORE_BYTES = 256
+	IGNORE_BYTES = 256,
+	MAX_REASON = TIME_STAMP_LEN + IGNORE_BYTES - 1
 };
 
 /* Remember to update manual page if you change --quiet return value(s). */
