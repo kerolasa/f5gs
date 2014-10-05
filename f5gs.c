@@ -260,15 +260,17 @@ static void add_tstamp_to_reason(struct runtime_config *restrict rtc)
 	char explanation[MAX_REASON];
 	char *p = explanation;
 	time_t prev_c;
+	struct tm prev_tm;
 
 	prev_c = rtc->previous_change.tv_sec;
 	*p = '\n';
 	p++;
-	strftime(p, 20, "%Y-%m-%dT%H:%M:%S", localtime(&prev_c));
+	localtime_r(&prev_c, &prev_tm);
+	strftime(p, 20, "%Y-%m-%dT%H:%M:%S", &prev_tm);
 	p += strlen(p);
 	snprintf(p, 7, ",%06d", (int)rtc->previous_change.tv_usec);
 	p += strlen(p);
-	strftime(p, 7, "%z ", localtime(&prev_c));
+	strftime(p, 7, "%z ", &prev_tm);
 	p += strlen(p);
 	strcpy(p, rtc->current_reason);
 	strcpy(rtc->current_reason, explanation);
