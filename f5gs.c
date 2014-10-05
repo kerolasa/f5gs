@@ -291,13 +291,13 @@ static void read_status_from_file(struct runtime_config *restrict rtc)
 	if (!(pidfd = fopen(rtc->pid_file, "r")))
 		goto err;
 	errno = 0;
-	if (fscanf(pidfd, "%d %d %d", &ignored, &state, &version) != 3 || errno != 0)
+	if (fscanf(pidfd, "%10d %1d %1d", &ignored, &state, &version) != 3 || errno != 0)
 		goto err;
 	if (version < 0 || STATE_FILE_VERSION < version)
 		goto err;
 	if (0 < version) {
 		size_t len;
-		if (fscanf(pidfd, "%ld.%ld:", &(rtc->previous_change.tv_sec), &(rtc->previous_change.tv_usec)) != 2
+		if (fscanf(pidfd, "%10ld.%6ld:", &(rtc->previous_change.tv_sec), &(rtc->previous_change.tv_usec)) != 2
 		    || errno != 0)
 			goto err;
 		len = fread(rtc->current_reason, sizeof(char), sizeof(rtc->current_reason), pidfd);
