@@ -590,7 +590,7 @@ static char *get_server_status(const struct runtime_config *restrict rtc)
 	return buf;
 }
 
-static char *getenv_str(const const char *restrict name)
+static char *getenv_str(const char *restrict name)
 {
 	const char *temp = getenv(name);
 	char *tmpvar;
