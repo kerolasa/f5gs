@@ -576,10 +576,14 @@ static char *get_server_status(const struct runtime_config *restrict rtc)
 			err(EXIT_FAILURE, "cannot connect");
 	}
 	if (rtc->why) {
+		struct timespec waittime = {
+			.tv_sec = 0L,
+			.tv_nsec = 1000000L
+		};
 		send(sfd, WHYWHEN, sizeof(WHYWHEN), 0);
 		/* this gives handle_request() time to write both status
 		 * and reason to socket */
-		usleep(1000);
+		nanosleep(&waittime, NULL);
 	}
 	if (recv(sfd, buf, sizeof(state_message) + MAX_REASON, 0) < 0)
 		err(EXIT_FAILURE, "reading socket failed");
