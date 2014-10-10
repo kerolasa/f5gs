@@ -1,0 +1,35 @@
+#!/bin/bash
+
+. "${srcdir=.}/tests/init.sh"
+
+cat >./$testname.exp <<END
+set --reason:
+f5gs: too long reason, truncating to 254 characters
+current status is: enable
+check --why:
+current status is: enable
+12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234
+END
+
+echo "set --reason:" > ./$testname.out
+
+f5gs --address 127.0.0.1 --port $tcp_port --statedir "$state_dir" --no-scripts --enable \
+	--reason '123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345' >> ./$testname.out 2>&1
+
+echo "check --why:" >> ./$testname.out
+
+f5gs --address 127.0.0.1 --port $tcp_port --why 2>&1 |
+awk '{
+	if (NR == 1)
+		print
+	if (NR == 2)
+		print $2
+	if (NR == 3)
+		next
+}' >> ./$testname.out 2>&1
+
+diff -u ./$testname.{exp,out}
+if [ $? -ne 0 ]; then retval=1; fi
+rm -f ./$testname.{exp,out}
+
+exit $retval

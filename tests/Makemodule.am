@@ -9,6 +9,7 @@ TESTS = \
 	tests/enable \
 	tests/disable \
 	tests/maintenance \
+	tests/long-reason \
 	tests/stop-server
 
 EXTRA_DIST += \
