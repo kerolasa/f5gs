@@ -2,7 +2,7 @@
 
 . "${srcdir=.}/tests/init.sh"
 
-echo "current status is: $testname" > ./$testname.exp
+echo "127.0.0.1: current status is: $testname" > ./$testname.exp
 if [ "$testname" = 'unknown' ]; then
 	opt_change=''
 else
