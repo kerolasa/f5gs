@@ -765,8 +765,11 @@ int main(const int argc, char **argv)
 			if (!strcmp(s, state_message[i]))
 				break;
 		retval = i;
-	} else
+	} else {
+		if (address)
+			printf("%s: ", address);
 		printf("current status is: %s\n", get_server_status(&rtc));
+	}
 	freeaddrinfo(rtc.res);
 	free(rtc.pid_file);
 
