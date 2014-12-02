@@ -126,7 +126,7 @@ while : ; do
 done
 # All command line option related stuff is done.
 
-CURRENT_STATE=$(f5gs --address $F5GS_LISTEN --port $F5GS_PORT | sed 's/^current status is: //')
+CURRENT_STATE=$(f5gs --address $F5GS_LISTEN --port $F5GS_PORT | sed 's/.*current status is: //')
 if [ "$CURRENT_STATE" = "$F5GS_REQUESTED_STATE" ]; then
 	msg 'requested state is same as run state'
 	exit 1
