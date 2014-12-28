@@ -400,27 +400,29 @@ static void *state_change_thread(void *arg)
 	return NULL;
 }
 
-static void stop_server(const int sig)
+static void stop_server(struct runtime_config *restrict rtc)
 {
 	int qid;
 
-	if (daemon_running == 0)
-		return;
-	daemon_running = 0;
-	pthread_rwlock_destroy(&(global_rtc->lock));
-	freeaddrinfo(global_rtc->res);
-	free(global_rtc->pid_file);
-	close(global_rtc->server_socket);
-	qid = msgget(global_rtc->ipc_key, 0600);
-	msgctl(qid, IPC_RMID, NULL);
 	pthread_cancel(chstate_thread);
+	pthread_rwlock_destroy(&rtc->lock);
+	qid = msgget(rtc->ipc_key, 0600);
+	msgctl(qid, IPC_RMID, NULL);
+	close(rtc->server_socket);
+	freeaddrinfo(rtc->res);
+	free(rtc->pid_file);
 #ifdef HAVE_LIBSYSTEMD
-	sd_journal_send("MESSAGE=service stopped, signal %d", sig, "MESSAGE_ID=%s",
+	sd_journal_send("MESSAGE=service stopped", "MESSAGE_ID=%s",
 			SD_ID128_CONST_STR(MESSAGE_STOP_START), "PRIORITY=%d", LOG_INFO, NULL);
 #else
 	syslog(LOG_INFO, "service stopped, signal %d", sig);
 	closelog();
 #endif
+}
+
+static void catch_stop(const int sig __attribute__((unused)))
+{
+	daemon_running = 0;
 }
 
 static void run_server(struct runtime_config *restrict rtc)
@@ -476,7 +478,7 @@ static void run_server(struct runtime_config *restrict rtc)
 	/* clean up after receiving signal */
 	sigemptyset(&sigact.sa_mask);
 	sigact.sa_flags = 0;
-	sigact.sa_handler = stop_server;
+	sigact.sa_handler = catch_stop;
 	sigaction(SIGHUP, &sigact, NULL);
 	sigaction(SIGINT, &sigact, NULL);
 	sigaction(SIGQUIT, &sigact, NULL);
@@ -492,6 +494,7 @@ static void run_server(struct runtime_config *restrict rtc)
 		*new_socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len);
 		pthread_create(&thread, NULL, handle_request, new_socket);
 	}
+	stop_server(rtc);
 }
 
 static int run_script(const struct runtime_config *restrict rtc, const char *restrict script)
