@@ -224,7 +224,7 @@ static int update_pid_file(const struct runtime_config *restrict rtc)
 	FILE *fd;
 	char buf[256];
 
-	if (access(rtc->state_dir, W_OK))
+	if (access(rtc->state_dir, F_OK))
 		if (mkdir(rtc->state_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH))
 			return 1;
 	if (!(fd = fopen(rtc->pid_file, "w"))) {
