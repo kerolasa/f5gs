@@ -9,11 +9,16 @@
 # processname: f5gs
 # pidfile: /var/lib/f5gs/0.0.0.0:32546
 
-# source function library
-. /etc/rc.d/init.d/functions
-
 RETVAL=0
 prog="f5gs"
+
+# source function library
+if [ -f /etc/rc.d/init.d/functions ]; then
+	. /etc/rc.d/init.d/functions
+else
+	echo "$prog: not a RedHat system?"
+	exit 1
+fi
 
 start() {
 	echo -n $"Starting $prog:"
@@ -31,22 +36,43 @@ stop() {
 	echo
 }
 
+is_runing() {
+	f5gs >/dev/null 2>&1
+	return $?
+}
+
+wait_stop() {
+	while is_runing; do
+		sleep 0.1
+	done
+}
+
 case "$1" in
 	start)
-		start
+		if is_runing; then
+			echo "$prog: already running"
+			RETVAL=1
+		else
+			start
+		fi
 		;;
 	stop)
-		stop
+		if ! is_runing; then
+			echo "$prog: not running"
+			RETVAL=1
+		else
+			stop
+		fi
 		;;
 	restart)
 		stop
+		wait_stop
 		start
 		;;
 	condrestart)
 		if [ -f /var/lock/subsys/$prog ] ; then
 			stop
-			# avoid race
-			sleep 0.1
+			wait_stop
 			start
 		fi
 		;;
