@@ -4,7 +4,7 @@ Conflicts=f5gs.service
 
 [Socket]
 Service=f5gs.service
-ListenStream=@PORT_NUM@
+ListenStream=@F5GS_TCP_PORT@
 ReusePort=true
 
 [Install]

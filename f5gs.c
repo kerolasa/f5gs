@@ -96,7 +96,7 @@ static void __attribute__((__noreturn__))
 	fputs("\n", out);
 	fputs(" -s, --server         start up daemon\n", out);
 	fputs(" -a, --address <addr> address (ip or name) daemon will listen\n", out);
-	fprintf(out, " -p, --port <port>    deamon tcp port (default: %s)\n", PORT_NUM);
+	fprintf(out, " -p, --port <port>    deamon tcp port (default: %s)\n", F5GS_TCP_PORT);
 	fprintf(out, "     --statedir <dir> status dir path (default: %s)\n", F5GS_RUNDIR);
 	fputs("     --foreground     run daemon in foreground\n", out);
 	fputs(" -q, --quiet          do not print status, use exit values\n", out);
@@ -647,7 +647,7 @@ int main(const int argc, char **argv)
 {
 	static struct runtime_config rtc;
 	int c, server = 0, retval = EXIT_SUCCESS;
-	const char *address = NULL, *port = PORT_NUM;
+	const char *address = NULL, *port = F5GS_TCP_PORT;
 	struct addrinfo hints;
 	int e;
 	enum {

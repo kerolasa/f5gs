@@ -14,7 +14,7 @@ status are been seen as more generic expression of should the server
 receive traffic, be monitored, or be part of automation in general.
 .PP
 This daemon will listen a TCP port
-.BR @PORT_NUM@ .
+.BR @F5GS_TCP_PORT@ .
 All connections to that port will be replied with one of the following
 responses:
 .IR disable ,
@@ -78,7 +78,7 @@ that binds the server to all interface or send the request to localhost.
 TCP
 .I port
 of the server.  Default port is
-.IR @PORT_NUM@ .
+.IR @F5GS_TCP_PORT@ .
 .TP
 \fB\-\-statedir\fR \fIdirectory\fR
 Relocate the command status
@@ -132,7 +132,7 @@ f5gs
 .br
 f5gs \-\-quiet; echo $?
 .br
-echo hello | nc server.example.com @PORT_NUM@; echo
+echo hello | nc server.example.com @F5GS_TCP_PORT@; echo
 .br
 f5gs \-\-why \-\-address server.example.com
 .SH BUGS

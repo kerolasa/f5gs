@@ -50,7 +50,7 @@ edit = sed \
 	-e 's|@PACKAGE_STRING[@]|$(PACKAGE_STRING)|g' \
 	-e 's|@PACKAGE_URL[@]|$(PACKAGE_URL)|g' \
 	-e 's|@PACKAGE_VERSION[@]|$(PACKAGE_VERSION)|g' \
-	-e 's|@PORT_NUM[@]|$(PORT_NUM)|g' \
+	-e 's|@F5GS_TCP_PORT[@]|$(F5GS_TCP_PORT)|g' \
 	-e 's|@bindir[@]|$(bindir)|g' \
 	-e 's|@datadir[@]|$(datadir)|g' \
 	-e 's|@f5gs_post[@]|$(f5gs_post)|g' \

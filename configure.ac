@@ -90,11 +90,11 @@ AS_IF([test "x$with_systemdsystemunitdir" != "xno"], [
 
 AC_DEFUN([DEFAULT_PORT], [32546])
 AC_ARG_WITH([default-portl],
-	[AS_HELP_STRING([--with-default-port=NUM], [default port (@<:@DEFAULT_PORT@:>@)])],
+	[AS_HELP_STRING([--with-default-port=NUM], [default listen port number (@<:@DEFAULT_PORT@:>@)])],
 	[default_port="$withval"],
 	[default_port="DEFAULT_PORT"])
-AC_DEFINE_UNQUOTED([PORT_NUM], ["$default_port"], [default port])
-AC_SUBST([PORT_NUM], [$default_port])
+AC_DEFINE_UNQUOTED([F5GS_TCP_PORT], ["$default_port"], [default listen port number])
+AC_SUBST([F5GS_TCP_PORT], [$default_port])
 
 AC_SUBST([f5gs_post], [$sysconfdir/$PACKAGE/post], [f5gs state chante post-script])
 AC_SUBST([f5gs_pre], [$sysconfdir/$PACKAGE/pre], [f5gs state change pre-script])
