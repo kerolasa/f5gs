@@ -1,12 +1,16 @@
 [Unit]
 Description=F5 Graceful Scaling
+Documentation=man:f5gs(8)
+RequiresMountsFor=/var/lib/f5gs
 After=network.target nss-lookup.target
 
 [Service]
 Type=notify
-NotifyAccess=all
+NotifyAccess=main
 ExecStart=@bindir@/f5gs --server --foreground
+Sockets=f5gs.socket
 Restart=always
+RestartSec=0
 
 [Install]
 WantedBy=multi-user.target

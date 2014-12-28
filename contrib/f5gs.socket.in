@@ -3,6 +3,7 @@ Description=F5 Graceful Scaling Socket
 Conflicts=f5gs.service
 
 [Socket]
+Service=f5gs.service
 ListenStream=@PORT_NUM@
 ReusePort=true
 
