@@ -407,6 +407,9 @@ static void stop_server(struct runtime_config *restrict rtc)
 {
 	int qid;
 
+#ifdef HAVE_LIBSYSTEMD
+	sd_notify(0, "STOPPING=1");
+#endif
 	daemon_running = 0;
 	pthread_kill(chstate_thread, SIGHUP);
 	pthread_join(chstate_thread, NULL);
