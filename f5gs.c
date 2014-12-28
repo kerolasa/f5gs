@@ -134,6 +134,7 @@ static void __attribute__((__noreturn__))
  fail:
 	free(s);
 	va_end(args);
+	stop_server(rtc);
 	exit(EXIT_FAILURE);
 }
 
@@ -404,6 +405,7 @@ static void stop_server(struct runtime_config *restrict rtc)
 {
 	int qid;
 
+	daemon_running = 0;
 	pthread_cancel(chstate_thread);
 	pthread_rwlock_destroy(&rtc->lock);
 	qid = msgget(rtc->ipc_key, 0600);
@@ -492,6 +494,12 @@ static void run_server(struct runtime_config *restrict rtc)
 		addr_len = sizeof(client_addr);
 		new_socket = xmalloc(sizeof(int));
 		*new_socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len);
+		if (*new_socket < 0) {
+			free(new_socket);
+			if (errno == EINTR)
+				continue;
+			faillog(rtc, "could not accept connection");
+		}
 		pthread_create(&thread, NULL, handle_request, new_socket);
 	}
 	stop_server(rtc);
