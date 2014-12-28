@@ -7,7 +7,7 @@
 # description: F5 Graceful Scaling helper daemon
 #
 # processname: f5gs
-# pidfile: /var/spool/f5gs/0.0.0.0:32546
+# pidfile: /var/lib/f5gs/0.0.0.0:32546
 
 # source function library
 . /etc/rc.d/init.d/functions

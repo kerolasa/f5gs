@@ -98,7 +98,7 @@ AC_SUBST([PORT_NUM], [$default_port])
 
 AC_SUBST([f5gs_post], [$sysconfdir/$PACKAGE/post], [f5gs state chante post-script])
 AC_SUBST([f5gs_pre], [$sysconfdir/$PACKAGE/pre], [f5gs state change pre-script])
-AC_SUBST([f5gs_rundir], [$localstatedir/spool/$PACKAGE/], [f5gs runtime state directory])
+AC_SUBST([f5gs_rundir], [$localstatedir/lib/$PACKAGE/], [f5gs runtime state directory])
 
 AC_CONFIG_FILES([Makefile
 		lib/Makefile

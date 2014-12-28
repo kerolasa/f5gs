@@ -69,6 +69,11 @@ if [ $1 -eq 1 ] ; then
 	fi
 else
 	# Upgrade
+	if [ ! -d %{_localstatedir}/lib/${name} ]; then
+		if [ -d %{_localstatedir}/spool/${name} ]; then
+			mv %{_localstatedir}/spool/${name} %{_localstatedir}/lib
+		fi
+	fi
 	/sbin/service %{name} restart >/dev/null 2>&1 || :
 fi
 
@@ -77,10 +82,8 @@ if [ $1 -eq 0 ] ; then
 	# Uninstall
 	/sbin/service %{name} stop >/dev/null 2>&1 || :
 	/sbin/chkconfig --del %{name} || :
-	# Some want to remove state files automatically.  Unfortunately
-	# there is no %{__spooldir} so this is as good one can get
-	# the removal.
-	# %{__rm} -rf %{_localstatedir}/spool/%{name}
+	# Some want to remove state files automatically.
+	# %{__rm} -rf %{_localstatedir}/lib/%{name}
 fi
 
 %clean
@@ -96,6 +99,10 @@ rm -rf %{buildroot}
 %_datadir/%{name}/*
 
 %changelog
+* Sun Dec 28 2014  Sami Kerola <kerolasa@iki.fi>
+- Use /var/lib/ rather than /var/spool/ directory This is the primary
+  place to put persistent data.
+
 * Sun Jul 13 2014  Sami Kerola <kerolasa@iki.fi>
 - add --reason to post script state change
 

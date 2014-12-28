@@ -33,5 +33,5 @@ build() {
 package() {
   cd "$srcdir/$pkgname"
   make PREFIX=/ DESTDIR="$pkgdir" install
-  mkdir -p $pkgdir/spool/f5gs
+  mkdir -p $pkgdir/lib/f5gs
 }
