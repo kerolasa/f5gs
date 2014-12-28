@@ -112,7 +112,7 @@ static void __attribute__((__noreturn__))
 }
 
 static void __attribute__((__noreturn__))
-    faillog(const struct runtime_config *restrict rtc, const char *restrict msg, ...)
+    faillog(struct runtime_config *restrict rtc, const char *restrict msg, ...)
 {
 	va_list args;
 	char *s;
@@ -188,7 +188,7 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidsocket)
 	pthread_exit(NULL);
 }
 
-static char *construct_pid_file(const struct runtime_config *restrict rtc)
+static char *construct_pid_file(struct runtime_config *restrict rtc)
 {
 	char *path;
 	void *p;

@@ -62,9 +62,9 @@ struct state_change_msg {
 };
 
 static void __attribute__((__noreturn__)) usage(FILE *out);
-static void __attribute__((__noreturn__)) faillog(const struct runtime_config *rtc, const char *msg, ...);
+static void __attribute__((__noreturn__)) faillog(struct runtime_config *rtc, const char *msg, ...);
 static void *handle_request(void *voidsocket);
-static char *construct_pid_file(const struct runtime_config *rtc);
+static char *construct_pid_file(struct runtime_config *rtc);
 static int update_pid_file(const struct runtime_config *rtc);
 static void read_status_from_file(struct runtime_config *rtc);
 static void daemonize(void);
