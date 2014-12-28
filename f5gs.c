@@ -348,7 +348,9 @@ static void *state_change_thread(void *arg)
 	if ((msqid = msgget(rtc->ipc_key, 0600 | IPC_CREAT)) == -1)
 		faillog(rtc, "could not create message queue");
 	while (daemon_running) {
-		if (msgrcv(msqid, &buf, sizeof(buf.info), IPC_MSG_ID, 0) == -1) {
+		if (msgrcv(msqid, &buf, sizeof(buf.info), IPC_MSG_ID, MSG_NOERROR) == -1) {
+			if (errno == EINTR)
+				continue;
 #ifdef HAVE_LIBSYSTEMD
 			char ebuf[256];
 			if (strerror_r(errno, ebuf, sizeof(ebuf)))
@@ -398,7 +400,7 @@ static void *state_change_thread(void *arg)
 		update_pid_file(rtc);
 		pthread_rwlock_unlock(&rtc->lock);
 	}
-	return NULL;
+	pthread_exit(0);
 }
 
 static void stop_server(struct runtime_config *restrict rtc)
@@ -406,7 +408,8 @@ static void stop_server(struct runtime_config *restrict rtc)
 	int qid;
 
 	daemon_running = 0;
-	pthread_cancel(chstate_thread);
+	pthread_kill(chstate_thread, SIGHUP);
+	pthread_join(chstate_thread, NULL);
 	pthread_rwlock_destroy(&rtc->lock);
 	qid = msgget(rtc->ipc_key, 0600);
 	msgctl(qid, IPC_RMID, NULL);
