@@ -33,6 +33,7 @@ static const char *state_message[] = {
 struct runtime_config {
 	struct addrinfo *res;
 	int server_socket;
+	pthread_t chstate_thread;
 	pthread_rwlock_t lock;
 	state_code current_state;
 	size_t message_length;

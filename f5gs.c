@@ -80,7 +80,6 @@
 /* global variables */
 static struct runtime_config *global_rtc;
 volatile sig_atomic_t daemon_running;
-pthread_t chstate_thread;
 
 /* keep functions in the order that allows skipping the function
  * definition lines */
@@ -412,8 +411,8 @@ static void stop_server(struct runtime_config *restrict rtc)
 	sd_notify(0, "STOPPING=1");
 #endif
 	daemon_running = 0;
-	pthread_kill(chstate_thread, SIGHUP);
-	pthread_join(chstate_thread, NULL);
+	pthread_kill(rtc->chstate_thread, SIGHUP);
+	pthread_join(rtc->chstate_thread, NULL);
 	pthread_rwlock_destroy(&rtc->lock);
 	qid = msgget(rtc->ipc_key, 0600);
 	msgctl(qid, IPC_RMID, NULL);
@@ -482,7 +481,7 @@ static void run_server(struct runtime_config *restrict rtc)
 	syslog(LOG_INFO, "started in state %s", state_message[rtc->current_state]);
 #endif
 	daemon_running = 1;
-	if (pthread_create(&chstate_thread, NULL, &state_change_thread, (void *)rtc))
+	if (pthread_create(&rtc->chstate_thread, NULL, &state_change_thread, (void *)rtc))
 		err(EXIT_FAILURE, "could not start state changer thread");
 	/* clean up after receiving signal */
 	sigemptyset(&sigact.sa_mask);
