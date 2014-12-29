@@ -656,10 +656,18 @@ static int set_server_status(struct runtime_config *restrict rtc)
 
 int main(const int argc, char **argv)
 {
-	static struct runtime_config rtc;
+	static struct runtime_config rtc = {
+		.state_dir = F5GS_RUNDIR,
+		.new_state = STATE_UNKNOWN,
+		0
+	};
 	int c, server = 0, retval = EXIT_SUCCESS;
 	const char *address = NULL, *port = F5GS_TCP_PORT;
-	struct addrinfo hints;
+	struct addrinfo hints = {
+		.ai_family = AF_UNSPEC,
+		.ai_socktype = SOCK_STREAM,
+		.ai_flags = AI_PASSIVE
+	};
 	int e;
 	enum {
 		STATEDIR_OPT = CHAR_MAX + 1,
@@ -692,11 +700,7 @@ int main(const int argc, char **argv)
 
 	set_program_name(argv[0]);
 	atexit(close_stdout);
-
-	memset(&rtc, 0, sizeof(struct runtime_config));
 	rtc.argv = argv;
-	rtc.state_dir = F5GS_RUNDIR;
-	rtc.new_state = STATE_UNKNOWN;
 	global_rtc = &rtc;
 
 	while ((c = getopt_long(argc, argv, "dmesa:l:p:qVh", longopts, NULL)) != -1) {
@@ -762,10 +766,6 @@ int main(const int argc, char **argv)
 	}
 	if (0 < argc - optind)
 		errx(EXIT_FAILURE, "too many arguments");
-	memset(&hints, 0, sizeof(struct addrinfo));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_PASSIVE;
 	e = getaddrinfo(address, port, &hints, &rtc.res);
 	if (e) {
 		if (rtc.quiet)
