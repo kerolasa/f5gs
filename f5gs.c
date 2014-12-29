@@ -102,6 +102,7 @@ static void __attribute__((__noreturn__))
 	fputs(" -q, --quiet          do not print status, use exit values\n", out);
 	fputs("     --reason <text>  add explanation to status change\n", out);
 	fputs("     --why            query reason, and when status was changed\n", out);
+	fputs("     --force          run pre and post script and ignore return values\n", out);
 	fputs("     --no-scripts     do not run pre or post status change scripts\n", out);
 	fputs("\n", out);
 	fputs(" -h, --help           display this help and exit\n", out);
@@ -558,7 +559,7 @@ static int change_state(struct runtime_config *restrict rtc)
 		memcpy(buf.info.reason, rtc->new_reason, strlen(rtc->new_reason) + 1);
 	else
 		buf.info.reason[0] = '\0';
-	if (run_script(rtc, F5GS_PRE))
+	if (run_script(rtc, F5GS_PRE) && !rtc->force)
 		return 1;
 	if ((rtc->ipc_key = ftok(rtc->pid_file, buf.mtype)) < 0)
 		errx(EXIT_FAILURE, "ftok: is f5gs server process running?");
@@ -566,7 +567,8 @@ static int change_state(struct runtime_config *restrict rtc)
 		err(EXIT_FAILURE, "ipc msgget");
 	if (msgsnd(qid, (void *)&buf, sizeof(buf.info), 0) != 0)
 		err(EXIT_FAILURE, "ipc message sending failed");
-	run_script(rtc, F5GS_POST);
+	if (run_script(rtc, F5GS_POST) && !rtc->force)
+		return 2;
 	return 0;
 }
 
@@ -626,8 +628,17 @@ static int set_server_status(struct runtime_config *restrict rtc)
 {
 	char *username, *sudo_user;
 
-	if (change_state(rtc))
-		errx(EXIT_FAILURE, "aborting action, consider running with --no-scripts");
+	switch (change_state(rtc)) {
+	case 0:		/* all ok */
+		break;
+	case 1:
+		errx(EXIT_FAILURE, "consider running with --no-scripts or --force");
+	case 2:
+		warnx("it is too late to abort, continueing to the end");
+		break;
+	default:	/* should be impossible */
+		abort();
+	}
 	username = getenv_str("USER");
 	sudo_user = getenv_str("SUDO_USER");
 #ifdef HAVE_LIBSYSTEMD
@@ -654,6 +665,7 @@ int main(const int argc, char **argv)
 		STATEDIR_OPT = CHAR_MAX + 1,
 		REASON_OPT,
 		WHY_OPT,
+		FORCE_OPT,
 		NO_SCRIPTS_OPT,
 		FOREGROUND_OPT
 	};
@@ -670,6 +682,7 @@ int main(const int argc, char **argv)
 		{"quiet", no_argument, NULL, 'q'},
 		{"reason", required_argument, NULL, REASON_OPT},
 		{"why", no_argument, NULL, WHY_OPT},
+		{"force", no_argument, NULL, NO_SCRIPTS_OPT},
 		{"no-scripts", no_argument, NULL, NO_SCRIPTS_OPT},
 		{"foreground", no_argument, NULL, FOREGROUND_OPT},
 		{"version", no_argument, NULL, 'V'},
@@ -723,6 +736,9 @@ int main(const int argc, char **argv)
 			break;
 		case WHY_OPT:
 			rtc.why = 1;
+			break;
+		case FORCE_OPT:
+			rtc.force = 1;
 			break;
 		case NO_SCRIPTS_OPT:
 			rtc.no_scripts = 1;

@@ -46,6 +46,7 @@ struct runtime_config {
 	key_t ipc_key;
 	unsigned int
 			why:1,
+			force:1,
 			no_scripts:1,
 			run_foreground:1,
 			quiet:1;

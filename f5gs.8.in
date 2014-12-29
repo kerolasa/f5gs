@@ -112,6 +112,9 @@ running
 \fB\-\-no\-scripts\fR
 Skip running pre or post scripts at status change.
 .TP
+\fB\-\-force\fR
+Run pre and post scripts, but ignore their return values.
+.TP
 \fB\-\-foreground\fR
 Run server process in foreground with result an operator can see error
 messages from terminal rather than syslog or journal.  This option is
