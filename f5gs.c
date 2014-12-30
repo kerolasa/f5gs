@@ -122,12 +122,11 @@ static void __attribute__((__noreturn__))
 		goto fail;
 	if (rtc->run_foreground)
 		err(EXIT_FAILURE, "%s", s);
-#ifdef HAVE_LIBSYSTEMD
 	if (strerror_r(errno, buf, sizeof(buf)))
+#ifdef HAVE_LIBSYSTEMD
 		sd_journal_send("MESSAGE=%s", s, "STRERROR=%s", buf, "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
 				"PRIORITY=%d", LOG_ERR, NULL);
 #else
-	if (strerror_r(errno, buf, sizeof(buf)))
 		syslog(LOG_ERR, "%s: %s", s, buf);
 #endif
  fail:
