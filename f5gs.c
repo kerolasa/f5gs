@@ -78,7 +78,6 @@
 #include "f5gs.h"
 
 /* global variables */
-static struct runtime_config *global_rtc;
 volatile sig_atomic_t daemon_running;
 
 /* keep functions in the order that allows skipping the function
@@ -145,9 +144,9 @@ int timeval_subtract(struct timeval *restrict result, struct timeval *restrict p
 	return result->tv_sec < 0;
 }
 
-static void __attribute__((__noreturn__)) *handle_request(void *voidsocket)
+static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
 {
-	int sock = *(int *)voidsocket;
+	struct socket_pass *sp = voidpt;
 	char io_buf[IGNORE_BYTES];
 	struct timeval timeout;
 	enum {
@@ -157,22 +156,23 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidsocket)
 	};
 
 	pthread_detach(pthread_self());
-	pthread_rwlock_rdlock(&(global_rtc->lock));
-	send(sock, state_message[global_rtc->current_state], global_rtc->message_length, 0);
-	pthread_rwlock_unlock(&(global_rtc->lock));
+	pthread_rwlock_rdlock(&(sp->rtc->lock));
+	if (send(sp->socket, state_message[sp->rtc->current_state], sp->rtc->message_length, 0) < 0)
+		err(EXIT_FAILURE, "send failed");
+	pthread_rwlock_unlock(&(sp->rtc->lock));
 	/* wait a second if client wants more info */
 	timeout.tv_sec = 1;
 	timeout.tv_usec = 0;
 	io_buf[0] = '\0';
-	if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
+	if (setsockopt(sp->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed");
-	recv(sock, io_buf, sizeof(io_buf), 0);
+	recv(sp->socket, io_buf, sizeof(io_buf), 0);
 	if (!strcmp(io_buf, WHYWHEN)) {
 		struct timeval now, delta;
 
-		send(sock, global_rtc->current_reason, strlen(global_rtc->current_reason), 0);
+		send(sp->socket, sp->rtc->current_reason, strlen(sp->rtc->current_reason), 0);
 		gettimeofday(&now, NULL);
-		if (timeval_subtract(&delta, &global_rtc->previous_change, &now))
+		if (timeval_subtract(&delta, &sp->rtc->previous_change, &now))
 			/* time went backwards, ignore result */ ;
 		else {
 			sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld ago",
@@ -180,11 +180,11 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidsocket)
 				delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
 				delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
 				delta.tv_sec % SECONDS_IN_MIN);
-			send(sock, io_buf, strlen(io_buf), 0);
+			send(sp->socket, io_buf, strlen(io_buf), 0);
 		}
 	}
-	close(sock);
-	free(voidsocket);
+	close(sp->socket);
+	free(sp);
 	pthread_exit(NULL);
 }
 
@@ -495,18 +495,19 @@ static void run_server(struct runtime_config *restrict rtc)
 	sigaction(SIGUSR2, &sigact, NULL);
 	while (daemon_running) {
 		pthread_t thread;
-		int *new_socket;
+		struct socket_pass *sp;
 
+		sp = xmalloc(sizeof(struct socket_pass));
+		sp->rtc = rtc;
 		addr_len = sizeof(client_addr);
-		new_socket = xmalloc(sizeof(int));
-		*new_socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len);
-		if (*new_socket < 0) {
-			free(new_socket);
+		sp->socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len);
+		if (sp->socket < 0) {
+			free(sp);
 			if (errno == EINTR)
 				continue;
 			faillog(rtc, "could not accept connection");
 		}
-		pthread_create(&thread, NULL, handle_request, new_socket);
+		pthread_create(&thread, NULL, handle_request, sp);
 	}
 	stop_server(rtc);
 }
@@ -700,7 +701,6 @@ int main(const int argc, char **argv)
 	set_program_name(argv[0]);
 	atexit(close_stdout);
 	rtc.argv = argv;
-	global_rtc = &rtc;
 
 	while ((c = getopt_long(argc, argv, "dmesa:l:p:qVh", longopts, NULL)) != -1) {
 		switch (c) {

@@ -53,6 +53,11 @@ struct runtime_config {
 			quiet:1;
 };
 
+struct socket_pass {
+	struct runtime_config *rtc;
+	int socket;
+};
+
 struct state_info {
 	state_code nstate;
 	char reason[MAX_REASON];
