@@ -616,13 +616,10 @@ static char *getenv_str(const char *restrict name)
 	const char *temp = getenv(name);
 	char *tmpvar;
 
-	if (temp != NULL) {
-		tmpvar = xmalloc(strlen(temp) + 1);
-		strcpy(tmpvar, temp);
-	} else {
-		tmpvar = xmalloc(strlen("NULL") + 1);
-		strcpy(tmpvar, "NULL");
-	}
+	if (temp != NULL)
+		tmpvar = xstrdup(temp);
+	else
+		tmpvar = xstrdup("NULL");
 	return tmpvar;
 }
 
@@ -777,7 +774,7 @@ int main(const int argc, char **argv)
 
 	if (server) {
 		gettimeofday(&rtc.previous_change, NULL);
-		strcpy(rtc.current_reason, "<program started>");
+		memcpy(rtc.current_reason, "<program started>", 18);
 		read_status_from_file(&rtc);
 		add_tstamp_to_reason(&rtc);
 		if (update_pid_file(&rtc))
