@@ -166,11 +166,13 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
 	io_buf[0] = '\0';
 	if (setsockopt(sp->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed");
-	recv(sp->socket, io_buf, sizeof(io_buf), 0);
+	if (recv(sp->socket, io_buf, sizeof(io_buf), 0) < 0)
+		err(EXIT_FAILURE, "receive failed");
 	if (!strcmp(io_buf, WHYWHEN)) {
 		struct timeval now, delta;
 
-		send(sp->socket, sp->rtc->current_reason, strlen(sp->rtc->current_reason), 0);
+		if (send(sp->socket, sp->rtc->current_reason, strlen(sp->rtc->current_reason), 0) < 0)
+			err(EXIT_FAILURE, "sending reason failed");
 		gettimeofday(&now, NULL);
 		if (timeval_subtract(&delta, &sp->rtc->previous_change, &now))
 			/* time went backwards, ignore result */ ;
@@ -180,7 +182,8 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
 				delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
 				delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
 				delta.tv_sec % SECONDS_IN_MIN);
-			send(sp->socket, io_buf, strlen(io_buf), 0);
+			if (send(sp->socket, io_buf, strlen(io_buf), 0) < 0)
+				err(EXIT_FAILURE, "send failed");
 		}
 	}
 	close(sp->socket);
@@ -200,7 +203,8 @@ static char *construct_pid_file(struct runtime_config *restrict rtc)
 		separator = 1;
 	else if (!last_slash)
 		separator = 1;
-	inet_ntop(rtc->res->ai_family, rtc->res->ai_addr->sa_data, s, sizeof(s));
+	if (inet_ntop(rtc->res->ai_family, rtc->res->ai_addr->sa_data, s, sizeof(s)) == NULL)
+		err(EXIT_FAILURE, "inet_ntop failed");
 	switch (rtc->res->ai_family) {
 	case AF_INET:
 		p = &((struct sockaddr_in *)rtc->res->ai_addr)->sin_addr;
@@ -211,7 +215,8 @@ static char *construct_pid_file(struct runtime_config *restrict rtc)
 	default:
 		abort();
 	}
-	inet_ntop(rtc->res->ai_family, p, s, sizeof(s));
+	if (inet_ntop(rtc->res->ai_family, p, s, sizeof(s)) == NULL)
+		err(EXIT_FAILURE, "inet_ntop failed");
 	ret = asprintf(&path, "%s%s%s:%d", rtc->state_dir, separator ? "/" : "", s,
 		       ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
 	if (ret < 0)
@@ -600,7 +605,8 @@ static char *get_server_status(const struct runtime_config *restrict rtc)
 			.tv_sec = 0L,
 			.tv_nsec = 1000000L
 		};
-		send(sfd, WHYWHEN, sizeof(WHYWHEN), 0);
+		if (send(sfd, WHYWHEN, sizeof(WHYWHEN), 0) < 0)
+			err(EXIT_FAILURE, "sending why request failed");
 		/* this gives handle_request() time to write both status
 		 * and reason to socket */
 		nanosleep(&waittime, NULL);
