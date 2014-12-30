@@ -210,12 +210,12 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
 		if (timeval_subtract(&delta, &sp->rtc->previous_change, &now))
 			/* time went backwards, ignore result */ ;
 		else {
-			sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld ago",
+			int len = sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld ago",
 				delta.tv_sec / SECONDS_IN_DAY,
 				delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
 				delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
 				delta.tv_sec % SECONDS_IN_MIN);
-			if (send(sp->socket, io_buf, strlen(io_buf), 0) < 0)
+			if (send(sp->socket, io_buf, len, 0) < 0)
 				warnlog(sp->rtc, "send failed");
 		}
 	}
