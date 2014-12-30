@@ -148,7 +148,10 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
 {
 	struct socket_pass *sp = voidpt;
 	char io_buf[IGNORE_BYTES];
-	struct timeval timeout;
+	const struct timeval timeout = {
+		.tv_sec = 1,
+		.tv_usec = 0
+	};
 	enum {
 		SECONDS_IN_DAY = 86400,
 		SECONDS_IN_HOUR = 3600,
@@ -161,8 +164,6 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
 		err(EXIT_FAILURE, "send failed");
 	pthread_rwlock_unlock(&(sp->rtc->lock));
 	/* wait a second if client wants more info */
-	timeout.tv_sec = 1;
-	timeout.tv_usec = 0;
 	io_buf[0] = '\0';
 	if (setsockopt(sp->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed");
@@ -192,11 +193,10 @@ static char *construct_pid_file(struct runtime_config *restrict rtc)
 {
 	char *path;
 	void *p;
-	char *last_slash;
+	const char *last_slash = strrchr(rtc->state_dir, '/');
 	char s[INET6_ADDRSTRLEN];
 	int separator = 0, ret;
 
-	last_slash = strrchr(rtc->state_dir, '/');
 	if (last_slash && *(last_slash + 1) != '\0' && *(last_slash + 1) != '/')
 		separator = 1;
 	else if (!last_slash)
@@ -438,7 +438,10 @@ static void run_server(struct runtime_config *restrict rtc)
 	struct sockaddr_in client_addr;
 	socklen_t addr_len;
 	pthread_attr_t attr;
-	struct sigaction sigact;
+	struct sigaction sigact = {
+		.sa_handler = catch_stop,
+		.sa_flags = 0
+	};
 #ifdef HAVE_LIBSYSTEMD
 	int ret;
 
@@ -485,8 +488,6 @@ static void run_server(struct runtime_config *restrict rtc)
 		err(EXIT_FAILURE, "could not start state changer thread");
 	/* clean up after receiving signal */
 	sigemptyset(&sigact.sa_mask);
-	sigact.sa_flags = 0;
-	sigact.sa_handler = catch_stop;
 	sigaction(SIGHUP, &sigact, NULL);
 	sigaction(SIGINT, &sigact, NULL);
 	sigaction(SIGQUIT, &sigact, NULL);
@@ -575,7 +576,10 @@ static int change_state(struct runtime_config *restrict rtc)
 static char *get_server_status(const struct runtime_config *restrict rtc)
 {
 	int sfd;
-	struct timeval timeout;
+	const struct timeval timeout = {
+		.tv_sec = 1,
+		.tv_usec = 0
+	};
 	static char buf[sizeof(state_message) + MAX_REASON];
 
 	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol))) {
@@ -584,8 +588,6 @@ static char *get_server_status(const struct runtime_config *restrict rtc)
 		else
 			err(EXIT_FAILURE, "cannot create socket");
 	}
-	timeout.tv_sec = 1;
-	timeout.tv_usec = 0;
 	if (setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed");
 	if (connect(sfd, rtc->res->ai_addr, rtc->res->ai_addrlen)) {
@@ -661,14 +663,13 @@ int main(const int argc, char **argv)
 		.new_state = STATE_UNKNOWN,
 		0
 	};
-	int c, server = 0, retval = EXIT_SUCCESS;
+	int e, c, server = 0, retval = EXIT_SUCCESS;
 	const char *address = NULL, *port = F5GS_TCP_PORT;
 	struct addrinfo hints = {
 		.ai_family = AF_UNSPEC,
 		.ai_socktype = SOCK_STREAM,
 		.ai_flags = AI_PASSIVE
 	};
-	int e;
 	enum {
 		STATEDIR_OPT = CHAR_MAX + 1,
 		REASON_OPT,
