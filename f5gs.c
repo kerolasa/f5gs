@@ -136,6 +136,29 @@ static void __attribute__((__noreturn__))
 	exit(EXIT_FAILURE);
 }
 
+static void warnlog(struct runtime_config *restrict rtc, const char *restrict msg, ...)
+{
+	va_list args;
+	char *s;
+	char buf[256];
+
+	va_start(args, msg);
+	if (vasprintf(&s, msg, args) < 0)
+		goto fail;
+	if (rtc->run_foreground)
+		warn("%s", s);
+	if (strerror_r(errno, buf, sizeof(buf)))
+#ifdef HAVE_LIBSYSTEMD
+		sd_journal_send("MESSAGE=%s", s, "STRERROR=%s", buf, "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
+				"PRIORITY=%d", LOG_ERR, NULL);
+#else
+		syslog(LOG_ERR, "%s: %s", s, buf);
+#endif
+ fail:
+	free(s);
+	va_end(args);
+}
+
 int timeval_subtract(struct timeval *restrict result, struct timeval *restrict prev, struct timeval *restrict now)
 {
 	result->tv_sec = now->tv_sec - prev->tv_sec;
@@ -159,20 +182,30 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
 
 	pthread_detach(pthread_self());
 	pthread_rwlock_rdlock(&(sp->rtc->lock));
-	if (send(sp->socket, state_message[sp->rtc->current_state], sp->rtc->message_length, 0) < 0)
-		err(EXIT_FAILURE, "send failed");
+	if (send(sp->socket, state_message[sp->rtc->current_state], sp->rtc->message_length, 0) < 0) {
+		pthread_rwlock_unlock(&(sp->rtc->lock));
+		warnlog(sp->rtc, "send failed");
+		goto alldone;
+	}
 	pthread_rwlock_unlock(&(sp->rtc->lock));
 	/* wait a second if client wants more info */
 	io_buf[0] = '\0';
-	if (setsockopt(sp->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
-		err(EXIT_FAILURE, "setsockopt failed");
-	if (recv(sp->socket, io_buf, sizeof(io_buf), 0) < 0)
-		err(EXIT_FAILURE, "receive failed");
+	if (setsockopt(sp->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout))) {
+		warnlog(sp->rtc, "setsockopt failed");
+		goto alldone;
+	}
+	if (recv(sp->socket, io_buf, sizeof(io_buf), 0) < 0) {
+		if (errno != EAGAIN)
+			warnlog(sp->rtc, "receive failed");
+		goto alldone;
+	}
 	if (!strcmp(io_buf, WHYWHEN)) {
 		struct timeval now, delta;
 
-		if (send(sp->socket, sp->rtc->current_reason, strlen(sp->rtc->current_reason), 0) < 0)
-			err(EXIT_FAILURE, "sending reason failed");
+		if (send(sp->socket, sp->rtc->current_reason, strlen(sp->rtc->current_reason), 0) < 0) {
+			warnlog(sp->rtc, "sending reason failed");
+			goto alldone;
+		}
 		gettimeofday(&now, NULL);
 		if (timeval_subtract(&delta, &sp->rtc->previous_change, &now))
 			/* time went backwards, ignore result */ ;
@@ -183,9 +216,10 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
 				delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
 				delta.tv_sec % SECONDS_IN_MIN);
 			if (send(sp->socket, io_buf, strlen(io_buf), 0) < 0)
-				err(EXIT_FAILURE, "send failed");
+				warnlog(sp->rtc, "send failed");
 		}
 	}
+alldone:
 	close(sp->socket);
 	free(sp);
 	pthread_exit(NULL);
@@ -508,7 +542,7 @@ static void run_server(struct runtime_config *restrict rtc)
 		sp->socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len);
 		if (sp->socket < 0) {
 			free(sp);
-			if (errno == EINTR)
+			if (errno == EINTR || errno == ECONNABORTED)
 				continue;
 			faillog(rtc, "could not accept connection");
 		}
