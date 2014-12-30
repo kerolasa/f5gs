@@ -619,6 +619,7 @@ static char *get_server_status(const struct runtime_config *restrict rtc)
 		.tv_usec = 0
 	};
 	static char buf[sizeof(state_message) + MAX_REASON];
+	ssize_t buflen;
 
 	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol))) {
 		if (rtc->quiet)
@@ -645,8 +646,11 @@ static char *get_server_status(const struct runtime_config *restrict rtc)
 		 * and reason to socket */
 		nanosleep(&waittime, NULL);
 	}
-	if (recv(sfd, buf, sizeof(state_message) + MAX_REASON, 0) < 0)
+	buflen = recv(sfd, buf, sizeof(state_message) + MAX_REASON, 0);
+	if (buflen < 0)
 		err(EXIT_FAILURE, "reading socket failed");
+	else
+		buf[buflen] = '\0';
 	return buf;
 }
 
