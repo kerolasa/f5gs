@@ -165,7 +165,7 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidsocket)
 	timeout.tv_usec = 0;
 	io_buf[0] = '\0';
 	if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)))
-		err(EXIT_FAILURE, "setsockopt failed\n");
+		err(EXIT_FAILURE, "setsockopt failed");
 	recv(sock, io_buf, sizeof(io_buf), 0);
 	if (!strcmp(io_buf, WHYWHEN)) {
 		struct timeval now, delta;
@@ -586,7 +586,7 @@ static char *get_server_status(const struct runtime_config *restrict rtc)
 	timeout.tv_sec = 1;
 	timeout.tv_usec = 0;
 	if (setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)))
-		err(EXIT_FAILURE, "setsockopt failed\n");
+		err(EXIT_FAILURE, "setsockopt failed");
 	if (connect(sfd, rtc->res->ai_addr, rtc->res->ai_addrlen)) {
 		if (rtc->quiet)
 			exit(STATE_UNKNOWN);
