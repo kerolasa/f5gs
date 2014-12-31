@@ -420,10 +420,12 @@ static void *state_change_thread(void *arg)
 #ifdef HAVE_LIBSYSTEMD
 		sd_journal_send("MESSAGE=state change %s -> %s", state_message[rtc->current_state],
 				state_message[buf.info.nstate], "MESSAGE_ID=%s",
-				SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO, NULL);
+				SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO,
+				"SENDER_UID=%ld", buf.info.uid, "SENDER_PID=%ld", buf.info.pid,
+				"SENDER_TTY=%s", buf.info.tty, NULL);
 #else
-		syslog(LOG_INFO, "state change received" ", state %s -> %s", state_message[rtc->current_state],
-		       state_message[buf.info.nstate]);
+		syslog(LOG_INFO, "state change received from uid %d pid %d tty %s, state %s -> %s", buf.info.uid,
+		       buf.info.pid, buf.info.tty, state_message[rtc->current_state], state_message[buf.info.nstate]);
 #endif
 		rtc->current_state = buf.info.nstate;
 		rtc->message_length = strlen(state_message[rtc->current_state]);
@@ -590,6 +592,9 @@ static int change_state(struct runtime_config *restrict rtc)
 	int qid;
 
 	buf.info.nstate = rtc->new_state;
+	buf.info.uid = getuid();
+	buf.info.pid = getpid();
+	ttyname_r(STDIN_FILENO, buf.info.tty, TTY_NAME_LEN);
 	if (rtc->new_reason)
 		memcpy(buf.info.reason, rtc->new_reason, strlen(rtc->new_reason) + 1);
 	else

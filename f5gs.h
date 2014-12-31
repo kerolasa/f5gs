@@ -9,7 +9,8 @@
 
 enum {
 	STATE_FILE_VERSION = 1,
-	IPC_MSG_ID = 1,
+	IPC_MSG_ID = 2,
+	TTY_NAME_LEN = 32,
 	TIME_STAMP_LEN = 33,
 	IGNORE_BYTES = 256,
 	MAX_REASON = TIME_STAMP_LEN + IGNORE_BYTES - 1
@@ -62,6 +63,9 @@ struct socket_pass {
 struct state_info {
 	state_code nstate;
 	char reason[MAX_REASON];
+	uid_t uid;
+	pid_t pid;
+	char tty[TTY_NAME_LEN];
 };
 
 struct state_change_msg {
