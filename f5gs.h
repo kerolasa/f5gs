@@ -76,7 +76,8 @@ struct state_change_msg {
 };
 
 static void __attribute__((__noreturn__)) usage(FILE *out);
-static void __attribute__((__noreturn__)) faillog(struct runtime_config *rtc, const char *msg, ...);
+static void warnlog(const struct runtime_config *restrict rtc, const char *restrict msg);
+static void __attribute__((__noreturn__)) faillog(struct runtime_config *rtc, const char *msg);
 static void *handle_request(void *voidsocket);
 static char *construct_pid_file(struct runtime_config *rtc);
 static int open_pid_file(struct runtime_config *restrict rtc);

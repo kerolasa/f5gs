@@ -110,53 +110,27 @@ static void __attribute__((__noreturn__))
 	exit(out == stderr ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
-static void __attribute__((__noreturn__))
-    faillog(struct runtime_config *restrict rtc, const char *restrict msg, ...)
+static void warnlog(const struct runtime_config *restrict rtc, const char *restrict msg)
 {
-	va_list args;
-	char *s;
 	char buf[256];
 
-	va_start(args, msg);
-	if (vasprintf(&s, msg, args) < 0)
-		goto fail;
 	if (rtc->run_foreground)
-		warn("%s", s);
+		warn("%s", msg);
 	if (strerror_r(errno, buf, sizeof(buf)))
 #ifdef HAVE_LIBSYSTEMD
-		sd_journal_send("MESSAGE=%s", s, "STRERROR=%s", buf, "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
+		sd_journal_send("MESSAGE=%s", msg, "STRERROR=%s", buf, "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
 				"PRIORITY=%d", LOG_ERR, NULL);
 #else
-		syslog(LOG_ERR, "%s: %s", s, buf);
+		syslog(LOG_ERR, "%s: %s", msg, buf);
 #endif
- fail:
-	free(s);
-	va_end(args);
-	stop_server(rtc);
-	exit(EXIT_FAILURE);
 }
 
-static void warnlog(struct runtime_config *restrict rtc, const char *restrict msg, ...)
+static void __attribute__((__noreturn__))
+    faillog(struct runtime_config *restrict rtc, const char *restrict msg)
 {
-	va_list args;
-	char *s;
-	char buf[256];
-
-	va_start(args, msg);
-	if (vasprintf(&s, msg, args) < 0)
-		goto fail;
-	if (rtc->run_foreground)
-		warn("%s", s);
-	if (strerror_r(errno, buf, sizeof(buf)))
-#ifdef HAVE_LIBSYSTEMD
-		sd_journal_send("MESSAGE=%s", s, "STRERROR=%s", buf, "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
-				"PRIORITY=%d", LOG_ERR, NULL);
-#else
-		syslog(LOG_ERR, "%s: %s", s, buf);
-#endif
- fail:
-	free(s);
-	va_end(args);
+	warnlog(rtc, msg);
+	stop_server(rtc);
+	exit(EXIT_FAILURE);
 }
 
 static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
