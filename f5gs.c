@@ -258,29 +258,30 @@ static char *construct_pid_file(struct runtime_config *restrict rtc)
 	return path;
 }
 
-static int update_pid_file(const struct runtime_config *restrict rtc)
+static int open_pid_file(struct runtime_config *restrict rtc)
 {
-	FILE *fd;
-	char buf[256];
-
 	if (access(rtc->state_dir, F_OK))
 		if (mkdir(rtc->state_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH))
-			return 1;
-	if (!(fd = fopen(rtc->pid_file, "w"))) {
-		if (strerror_r(errno, buf, sizeof(buf)))
-#ifdef HAVE_LIBSYSTEMD
-			sd_journal_send("MESSAGE=could not open file %s", rtc->pid_file, "MESSAGE_ID=%s",
-					SD_ID128_CONST_STR(MESSAGE_ERROR), "STRERROR=%s", buf, "PRIORITY=%d", LOG_ERR,
-					NULL);
-#else
-			syslog(LOG_ERR, "could not open file: %s: %s", rtc->pid_file, buf);
-#endif
-		return 1;
-	}
-	fprintf(fd, "%u %d %d\n", getpid(), rtc->current_state, STATE_FILE_VERSION);
-	fprintf(fd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec,
+			err(EXIT_FAILURE, "cannot create directory: %s", rtc->state_dir);
+	if (!(rtc->pid_filefd = fopen(rtc->pid_file, "w")))
+		err(EXIT_FAILURE, "cannot not open file: %s", rtc->pid_file);
+	return 0;
+}
+
+static void update_pid_file(const struct runtime_config *restrict rtc)
+{
+	rewind(rtc->pid_filefd);
+	fprintf(rtc->pid_filefd, "%u %d %d\n", getpid(), rtc->current_state, STATE_FILE_VERSION);
+	fprintf(rtc->pid_filefd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec,
 		rtc->current_reason + TIME_STAMP_LEN - 1);
-	if (close_stream(fd)) {
+	fflush(rtc->pid_filefd);
+}
+
+static int close_pid_file(struct runtime_config *restrict rtc)
+{
+	char buf[256];
+
+	if (close_stream(rtc->pid_filefd)) {
 		if (strerror_r(errno, buf, sizeof(buf)))
 #ifdef HAVE_LIBSYSTEMD
 			sd_journal_send("MESSAGE=closing %s failed", rtc->pid_file, "MESSAGE_ID=%s",
@@ -456,7 +457,10 @@ static void stop_server(struct runtime_config *restrict rtc)
 	msgctl(qid, IPC_RMID, NULL);
 	close(rtc->server_socket);
 	freeaddrinfo(rtc->res);
+	close_pid_file(rtc);
+	open_pid_file(rtc);
 	update_pid_file(rtc);
+	close_pid_file(rtc);
 	free(rtc->pid_file);
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service stopped", "MESSAGE_ID=%s",
@@ -509,11 +513,8 @@ static void run_server(struct runtime_config *restrict rtc)
 	if (pthread_rwlock_init(&rtc->lock, NULL))
 		err(EXIT_FAILURE, "cannot init read-write lock");
 
-	if (!rtc->run_foreground) {
+	if (!rtc->run_foreground)
 		daemonize();
-		if (update_pid_file(rtc))
-			faillog(rtc, "cannot write pid file %s", rtc->pid_file);
-	}
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service started", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START), "STATE=%s",
 			state_message[rtc->current_state], "PRIORITY=%d", LOG_INFO, NULL);
@@ -821,8 +822,7 @@ int main(const int argc, char **argv)
 		memcpy(rtc.current_reason, "<program started>", 18);
 		read_status_from_file(&rtc);
 		add_tstamp_to_reason(&rtc);
-		if (update_pid_file(&rtc))
-			err(EXIT_FAILURE, "cannot write pid file: %s", rtc.pid_file);
+		open_pid_file(&rtc);
 		if (!(rtc.ipc_key = ftok(rtc.pid_file, IPC_MSG_ID)))
 			err(EXIT_FAILURE, "ftok failed");
 		run_server(&rtc);

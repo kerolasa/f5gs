@@ -39,6 +39,7 @@ struct runtime_config {
 	size_t message_length;
 	const char *state_dir;
 	char *pid_file;
+	FILE *pid_filefd;
 	char **argv;
 	state_code new_state;
 	char *new_reason;
@@ -72,7 +73,9 @@ static void __attribute__((__noreturn__)) usage(FILE *out);
 static void __attribute__((__noreturn__)) faillog(struct runtime_config *rtc, const char *msg, ...);
 static void *handle_request(void *voidsocket);
 static char *construct_pid_file(struct runtime_config *rtc);
-static int update_pid_file(const struct runtime_config *rtc);
+static int open_pid_file(struct runtime_config *restrict rtc);
+static void update_pid_file(const struct runtime_config *rtc);
+static int close_pid_file(struct runtime_config *restrict rtc);
 static void read_status_from_file(struct runtime_config *rtc);
 static void daemonize(void);
 static void stop_server(struct runtime_config *restrict rtc);
