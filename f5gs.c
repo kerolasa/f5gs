@@ -703,7 +703,7 @@ int main(const int argc, char **argv)
 		.new_state = STATE_UNKNOWN,
 		0
 	};
-	int e, c, server = 0, retval = EXIT_SUCCESS;
+	int c, server = 0, retval = EXIT_SUCCESS;
 	const char *address = NULL, *port = F5GS_TCP_PORT;
 	struct addrinfo hints = {
 		.ai_family = AF_UNSPEC,
@@ -806,15 +806,15 @@ int main(const int argc, char **argv)
 	}
 	if (0 < argc - optind)
 		errx(EXIT_FAILURE, "too many arguments");
-	e = getaddrinfo(address, port, &hints, &rtc.res);
-	if (e) {
+	c = getaddrinfo(address, port, &hints, &rtc.res);
+	if (c) {
 		if (rtc.quiet)
 			exit(STATE_UNKNOWN);
 		else
-			errx(EXIT_FAILURE, "getaddrinfo: %s port %s: %s", address, port, gai_strerror(e));
+			errx(EXIT_FAILURE, "getaddrinfo: %s port %s: %s", address, port, gai_strerror(c));
 	}
 	rtc.pid_file = construct_pid_file(&rtc);
-
+	/* run server */
 	if (server) {
 		gettimeofday(&rtc.previous_change, NULL);
 		memcpy(rtc.current_reason, "<program started>", 18);
@@ -825,7 +825,9 @@ int main(const int argc, char **argv)
 			err(EXIT_FAILURE, "ftok failed");
 		run_server(&rtc);
 		return EXIT_SUCCESS;
-	} else if (rtc.new_state != STATE_UNKNOWN) {
+	}
+	/* change server state */
+	if (rtc.new_state != STATE_UNKNOWN) {
 		struct timespec waittime = {
 			.tv_sec = 0L,
 			.tv_nsec = 1000000L
@@ -835,7 +837,7 @@ int main(const int argc, char **argv)
 		 * server replies using old information */
 		nanosleep(&waittime, NULL);
 	}
-
+	/* request server state */
 	if (rtc.quiet) {
 		char *s;
 		int i;
@@ -850,8 +852,8 @@ int main(const int argc, char **argv)
 			printf("%s: ", address);
 		printf("current status is: %s\n", get_server_status(&rtc));
 	}
+	/* clean up and exit */
 	freeaddrinfo(rtc.res);
 	free(rtc.pid_file);
-
 	return retval;
 }
