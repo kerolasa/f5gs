@@ -121,7 +121,7 @@ static void __attribute__((__noreturn__))
 	if (vasprintf(&s, msg, args) < 0)
 		goto fail;
 	if (rtc->run_foreground)
-		err(EXIT_FAILURE, "%s", s);
+		warn("%s", s);
 	if (strerror_r(errno, buf, sizeof(buf)))
 #ifdef HAVE_LIBSYSTEMD
 		sd_journal_send("MESSAGE=%s", s, "STRERROR=%s", buf, "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
@@ -248,7 +248,7 @@ static char *construct_pid_file(struct runtime_config *restrict rtc)
 	ret = asprintf(&path, "%s%s%s:%d", rtc->state_dir, separator ? "/" : "", s,
 		       ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
 	if (ret < 0)
-		faillog(rtc, "cannot allocate memory");
+		err(EXIT_FAILURE, "asprintf failed");
 	return path;
 }
 
@@ -520,7 +520,7 @@ static void run_server(struct runtime_config *restrict rtc)
 #endif
 	daemon_running = 1;
 	if (pthread_create(&rtc->chstate_thread, NULL, &state_change_thread, (void *)rtc))
-		err(EXIT_FAILURE, "could not start state changer thread");
+		faillog(rtc, "could not start state changer thread");
 	/* clean up after receiving signal */
 	sigemptyset(&sigact.sa_mask);
 	sigaction(SIGHUP, &sigact, NULL);
@@ -557,7 +557,7 @@ static int run_script(const struct runtime_config *restrict rtc, const char *res
 		return 0;
 	child = fork();
 	if (child < 0)
-		errx(EXIT_FAILURE, "running %s failed", script);
+		err(EXIT_FAILURE, "cannot fork %s", script);
 	if (child == 0) {
 		if (setuid(geteuid()))
 			err(EXIT_FAILURE, "setuid() failed");
