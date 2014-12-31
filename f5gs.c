@@ -114,7 +114,7 @@ static void warnlog(const struct runtime_config *restrict rtc, const char *restr
 {
 	char buf[256];
 
-	if (rtc->run_foreground)
+	if (rtc->run_foreground && getppid() != 1)
 		warn("%s", msg);
 	if (strerror_r(errno, buf, sizeof(buf)))
 #ifdef HAVE_LIBSYSTEMD
