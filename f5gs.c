@@ -267,7 +267,7 @@ static void update_pid_file(const struct runtime_config *restrict rtc)
 	rewind(rtc->pid_filefd);
 	fprintf(rtc->pid_filefd, "%u %d %d\n", getpid(), rtc->current_state, STATE_FILE_VERSION);
 	fprintf(rtc->pid_filefd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec,
-		rtc->current_reason + TIME_STAMP_LEN - 1);
+		rtc->current_reason + TIME_STAMP_LEN);
 	fflush(rtc->pid_filefd);
 }
 
@@ -291,7 +291,7 @@ static int close_pid_file(struct runtime_config *restrict rtc)
 
 static void add_tstamp_to_reason(struct runtime_config *restrict rtc)
 {
-	char explanation[MAX_REASON];
+	char explanation[MAX_MESSAGE];
 	char *p = explanation;
 	time_t prev_c;
 	struct tm prev_tm;
@@ -334,7 +334,7 @@ static void read_status_from_file(struct runtime_config *restrict rtc)
 		if (fscanf(pidfd, "%10ld.%6ld:", &(rtc->previous_change.tv_sec), &(rtc->previous_change.tv_usec)) != 2
 		    || errno != 0)
 			goto err;
-		len = fread(rtc->current_reason, sizeof(char), sizeof(rtc->current_reason), pidfd);
+		len = fread(rtc->current_reason, sizeof(char), REASON_TEXT, pidfd);
 		rtc->current_reason[len] = '\0';
 	}
 	if (valid_state(state))
@@ -618,7 +618,7 @@ static char *get_server_status(const struct runtime_config *restrict rtc)
 		.tv_sec = 1,
 		.tv_usec = 0
 	};
-	static char buf[sizeof(state_message) + MAX_REASON];
+	static char buf[CLIENT_SOCKET_BUF];
 	ssize_t buflen;
 
 	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol))) {
@@ -646,7 +646,7 @@ static char *get_server_status(const struct runtime_config *restrict rtc)
 		 * and reason to socket */
 		nanosleep(&waittime, NULL);
 	}
-	buflen = recv(sfd, buf, sizeof(state_message) + MAX_REASON, 0);
+	buflen = recv(sfd, buf, CLIENT_SOCKET_BUF, 0);
 	if (buflen < 0)
 		err(EXIT_FAILURE, "reading socket failed");
 	else
@@ -772,9 +772,9 @@ int main(const int argc, char **argv)
 			rtc.quiet = 1;
 			break;
 		case REASON_OPT:
-			if ((MAX_REASON - TIME_STAMP_LEN - 1) < strlen(optarg)) {
-				warnx("too long reason, truncating to %d characters", MAX_REASON - TIME_STAMP_LEN - 1);
-				optarg[MAX_REASON - TIME_STAMP_LEN - 1] = '\0';
+			if (REASON_TEXT < strlen(optarg)) {
+				warnx("too long reason, truncating to %d characters", REASON_TEXT);
+				optarg[REASON_TEXT] = '\0';
 			}
 			rtc.new_reason = optarg;
 			break;

@@ -7,15 +7,6 @@
 
 # define WHYWHEN "info:0"
 
-enum {
-	STATE_FILE_VERSION = 1,
-	IPC_MSG_ID = 2,
-	TTY_NAME_LEN = 32,
-	TIME_STAMP_LEN = 33,
-	IGNORE_BYTES = 256,
-	MAX_REASON = TIME_STAMP_LEN + IGNORE_BYTES - 1
-};
-
 /* Remember to update manual page if you change --quiet return value(s). */
 typedef enum {
 	STATE_ENABLE = 0,	/* must have value 0, and first entry */
@@ -31,6 +22,17 @@ static const char *state_message[] = {
 	[STATE_UNKNOWN] = "unknown"
 };
 
+enum {
+	STATE_FILE_VERSION = 1,
+	IPC_MSG_ID = 2,
+	TTY_NAME_LEN = 32,
+	TIME_STAMP_LEN = 32, /* \n + timestamp + sp */
+	IGNORE_BYTES = 256,
+	REASON_TEXT = 256,
+	MAX_MESSAGE = TIME_STAMP_LEN + REASON_TEXT,
+	CLIENT_SOCKET_BUF = sizeof(state_message) + MAX_MESSAGE
+};
+
 struct runtime_config {
 	struct addrinfo *res;
 	int server_socket;
@@ -44,7 +46,7 @@ struct runtime_config {
 	char **argv;
 	state_code new_state;
 	char *new_reason;
-	char current_reason[MAX_REASON];
+	char current_reason[MAX_MESSAGE];
 	struct timeval previous_change;
 	key_t ipc_key;
 	unsigned int
@@ -62,7 +64,7 @@ struct socket_pass {
 
 struct state_info {
 	state_code nstate;
-	char reason[MAX_REASON];
+	char reason[MAX_MESSAGE];
 	uid_t uid;
 	pid_t pid;
 	char tty[TTY_NAME_LEN];
