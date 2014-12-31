@@ -827,8 +827,16 @@ int main(const int argc, char **argv)
 			err(EXIT_FAILURE, "ftok failed");
 		run_server(&rtc);
 		return EXIT_SUCCESS;
-	} else if (rtc.new_state != STATE_UNKNOWN)
+	} else if (rtc.new_state != STATE_UNKNOWN) {
+		struct timespec waittime = {
+			.tv_sec = 0L,
+			.tv_nsec = 1000000L
+		};
 		retval = set_server_status(&rtc);
+		/* sleep a bit before get_server_status(), else sometimes
+		 * server replies using old information */
+		nanosleep(&waittime, NULL);
+	}
 
 	if (rtc.quiet) {
 		char *s;
