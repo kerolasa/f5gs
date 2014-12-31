@@ -427,9 +427,11 @@ static void stop_server(struct runtime_config *restrict rtc)
 	close(rtc->server_socket);
 	freeaddrinfo(rtc->res);
 	close_pid_file(rtc);
-	open_pid_file(rtc);
-	update_pid_file(rtc);
-	close_pid_file(rtc);
+	if (access(rtc->pid_file, F_OK)) {
+		open_pid_file(rtc);
+		update_pid_file(rtc);
+		close_pid_file(rtc);
+	}
 	free(rtc->pid_file);
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service stopped", "MESSAGE_ID=%s",
