@@ -362,14 +362,13 @@ static void daemonize(void)
 	if (!setsid())
 		err(EXIT_FAILURE, "cannot setsid");
 	if (chdir("/"))
-		err(EXIT_FAILURE, "cannot chdir");
-	if ((fd = open("/dev/null", O_RDWR, 0)) != -1) {
-		dup2(fd, STDIN_FILENO);
-		dup2(fd, STDOUT_FILENO);
-		dup2(fd, STDERR_FILENO);
-		if (fd > STDERR_FILENO)
-			close(fd);
-	}
+		err(EXIT_FAILURE, "cannot chdir to root");
+	if ((fd = open("/dev/null", O_RDWR, 0)) < 0)
+		err(EXIT_FAILURE, "cannot open /dev/null");
+	dup2(fd, STDIN_FILENO);
+	dup2(fd, STDOUT_FILENO);
+	dup2(fd, STDERR_FILENO);
+	close(fd);
 }
 
 static void *state_change_thread(void *arg)
