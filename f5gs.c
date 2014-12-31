@@ -159,13 +159,6 @@ static void warnlog(struct runtime_config *restrict rtc, const char *restrict ms
 	va_end(args);
 }
 
-int timeval_subtract(struct timeval *restrict result, struct timeval *restrict prev, struct timeval *restrict now)
-{
-	result->tv_sec = now->tv_sec - prev->tv_sec;
-	/* Return 1 if result is negative. */
-	return result->tv_sec < 0;
-}
-
 static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
 {
 	struct socket_pass *sp = voidpt;
@@ -207,9 +200,10 @@ static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
 			goto alldone;
 		}
 		gettimeofday(&now, NULL);
-		if (timeval_subtract(&delta, &sp->rtc->previous_change, &now))
+		if (timercmp(&now, &sp->rtc->previous_change, <))
 			/* time went backwards, ignore result */ ;
 		else {
+			timersub(&now, &sp->rtc->previous_change, &delta);
 			int len = sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld ago",
 				delta.tv_sec / SECONDS_IN_DAY,
 				delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
