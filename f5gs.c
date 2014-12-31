@@ -302,7 +302,7 @@ static void add_tstamp_to_reason(struct runtime_config *restrict rtc)
 	localtime_r(&prev_c, &prev_tm);
 	strftime(p, 20, "%Y-%m-%dT%H:%M:%S", &prev_tm);
 	p += strlen(p);
-	snprintf(p, 7, ",%06d", (int)rtc->previous_change.tv_usec);
+	snprintf(p, 7, ",%06ld", rtc->previous_change.tv_usec);
 	p += strlen(p);
 	strftime(p, 7, "%z ", &prev_tm);
 	p += strlen(p);
