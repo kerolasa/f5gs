@@ -604,7 +604,7 @@ static int change_state(struct runtime_config *restrict rtc)
 	if ((rtc->ipc_key = ftok(rtc->pid_file, buf.mtype)) < 0)
 		errx(EXIT_FAILURE, "ftok: is f5gs server process running?");
 	if ((qid = msgget(rtc->ipc_key, 0600)) < 0)
-		err(EXIT_FAILURE, "ipc msgget");
+		errx(EXIT_FAILURE, "msgget: ipc_key not found, a version mismatch?");
 	if (msgsnd(qid, (void *)&buf, sizeof(buf.info), 0) != 0)
 		err(EXIT_FAILURE, "ipc message sending failed");
 	if (run_script(rtc, F5GS_POST) && !rtc->force)
