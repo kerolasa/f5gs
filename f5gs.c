@@ -43,6 +43,7 @@
 #include <limits.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <paths.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
@@ -542,7 +543,7 @@ static int run_script(const struct runtime_config *restrict rtc, const char *res
 #else
 		environ = NULL;
 #endif
-		setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin", 1);
+		setenv("PATH", _PATH_STDPATH, 1);
 		exit(execv(script, rtc->argv));
 	}
 	while (child) {

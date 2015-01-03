@@ -184,11 +184,13 @@ Location of the status files.
 .SH ENVIRONMENT
 The
 .B f5gs
-will hardcode PATH to have value
-.I /bin:\:/usr/bin:\:/sbin:\:/usr/sbin
-and remove all other environment variables before running
+will hardcode PATH to have _PATH_STDPATH value from
+.B paths.h
+header file, that usually has value
+.I /usr/bin:\:/bin:\:/usr/sbin:\:/sbin
+All other environment variables are cleared before running
 .I pre
-or
+and
 .I post
 executables.
 .SH AUTHORS
