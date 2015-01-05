@@ -1,3 +1,37 @@
+2015-01-05
+	Release v1.0.  It is time to declare the software is mature
+	enough to come out of zero series.  With that I also promise to
+	try harder to avoid version compatibility problems, which
+	indicates this update is again breaking stuff, so please read
+	warnings below.
+
+	Warning 1.  The status file is moved (again), and this time
+	from /var/spool to /var/lib to be compatible with Linux FHS.
+
+	Warning 2.  Remote status check response tells the address who
+	responded.  This will break check scripts that use --address
+	option.
+
+	Warning 3.  PATH for pre and post scripts has various bin
+	directories in different order.  See manual page for details.
+
+	Warning 4.  The IPC message got internal format update, that
+	now includes information who sent state change message (pid &
+	tty).  This makes old f5gs client incompatible with new server
+	software.  (But why anyone would have more than one of these
+	binaries?)
+
+	Features and fixes.
+
+	The release includes new --force option, that is similar with
+	--no-scripts but will run scripts.  At stop systemd is notified
+	the service is going down.
+
+	The rest of the changes are none functional improvements, such
+	as more error checking, more regression tests, clarification to
+	code, cleaner signal handling, and so on.  See git log for
+	details.
+
 2014-07-12
 	Release v0.5.  The systemd support is now enabled by default when
 	build has needed libraries.  Earlier --quiet option implied
