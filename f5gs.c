@@ -438,7 +438,7 @@ static void stop_server(struct runtime_config *restrict rtc)
 	sd_journal_send("MESSAGE=service stopped", "MESSAGE_ID=%s",
 			SD_ID128_CONST_STR(MESSAGE_STOP_START), "PRIORITY=%d", LOG_INFO, NULL);
 #else
-	syslog(LOG_INFO, "service stopped, signal %d", sig);
+	syslog(LOG_INFO, "service stopped");
 	closelog();
 #endif
 }
