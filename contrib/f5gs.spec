@@ -69,9 +69,9 @@ if [ $1 -eq 1 ] ; then
 	fi
 else
 	# Upgrade
-	if [ ! -d %{_localstatedir}/lib/${name} ]; then
-		if [ -d %{_localstatedir}/spool/${name} ]; then
-			mv %{_localstatedir}/spool/${name} %{_localstatedir}/lib
+	if [ ! -d %{_localstatedir}/lib/%{name} ]; then
+		if [ -d %{_localstatedir}/spool/%{name} ]; then
+			mv %{_localstatedir}/spool/%{name} %{_localstatedir}/lib
 		fi
 	fi
 	/sbin/service %{name} restart >/dev/null 2>&1 || :
