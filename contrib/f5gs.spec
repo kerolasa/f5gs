@@ -92,7 +92,6 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root,-)
 %doc COPYING
-%doc ChangeLog
 %doc %_mandir/man*/*
 %_bindir/*
 %{_initddir}/%{name}
