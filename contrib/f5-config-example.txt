@@ -1,0 +1,36 @@
+# The following configuration should more or less work.  Notice that
+# the virtual service has two checks, and both must be good in order to
+# pass traffic to backend.
+
+virtual example_service {
+   pool example_pool_x
+   destination 192.168.10.20:80
+   ip protocol tcp
+}
+
+pool example_pool_x {
+   monitor all application_x_check_5678 and f5gs_check
+   members {
+      10.20.30.40:5678 {}
+      10.20.30.41:5678 {}
+   }
+}
+
+monitor application_x_check_5678 {
+   defaults from http
+   recv "HTTP/1.1 200 OK"
+   send "GET https://xapp.example.com/a-test-page.js.php.rb.cgi
+   HTTP/1.0\r\n\r\n"
+}
+
+# See also
+# https://support.f5.com/kb/en-us/solutions/public/12000/800/sol12818.html
+monitor f5gs_check {
+   defaults from tcp
+   interval 10
+   timeout 2
+   dest *:32546
+   recv disable "maintenance"
+   recv "enable"
+   send "state"
+}
