@@ -520,7 +520,8 @@ static void run_server(struct runtime_config *restrict rtc)
 				continue;
 			faillog(rtc, "could not accept connection");
 		}
-		pthread_create(&thread, NULL, handle_request, sp);
+		if (pthread_create(&thread, NULL, handle_request, sp))
+			warnlog(sp->rtc, "could not create handle_request thread");
 	}
 	stop_server(rtc);
 }
