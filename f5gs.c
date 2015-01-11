@@ -863,6 +863,7 @@ int main(const int argc, char **argv)
 		read_status_from_file(&rtc);
 		add_tstamp_to_reason(&rtc);
 		open_pid_file(&rtc);
+		update_pid_file(&rtc);
 		if (!(rtc.ipc_key = ftok(rtc.pid_file, IPC_MSG_ID)))
 			err(EXIT_FAILURE, "ftok failed");
 		run_server(&rtc);
