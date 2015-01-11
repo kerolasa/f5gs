@@ -27,6 +27,7 @@ enum {
 	IPC_MSG_ID = 2,
 	TTY_NAME_LEN = 32,
 	TIME_STAMP_LEN = 32, /* \n + timestamp + sp */
+	NUM_EVENTS = 32,
 	IGNORE_BYTES = 256,
 	REASON_TEXT = 256,
 	MAX_MESSAGE = TIME_STAMP_LEN + REASON_TEXT,
@@ -36,7 +37,8 @@ enum {
 struct runtime_config {
 	struct addrinfo *res;
 	int server_socket;
-	pthread_t chstate_thread;
+	int epollfd;
+	pthread_t worker;
 	pthread_rwlock_t lock;
 	state_code current_state;
 	size_t message_length;
@@ -57,11 +59,6 @@ struct runtime_config {
 			quiet:1;
 };
 
-struct socket_pass {
-	struct runtime_config *rtc;
-	int socket;
-};
-
 struct state_info {
 	state_code nstate;
 	char reason[MAX_MESSAGE];
@@ -78,13 +75,14 @@ struct state_change_msg {
 static void __attribute__((__noreturn__)) usage(FILE *out);
 static void warnlog(const struct runtime_config *restrict rtc, const char *restrict msg);
 static void __attribute__((__noreturn__)) faillog(struct runtime_config *rtc, const char *msg);
-static void *handle_request(void *voidsocket);
+static void *handle_requests(void *voidpt);
 static char *construct_pid_file(struct runtime_config *rtc);
 static int open_pid_file(struct runtime_config *restrict rtc);
 static void update_pid_file(const struct runtime_config *rtc);
 static int close_pid_file(struct runtime_config *restrict rtc);
 static void read_status_from_file(struct runtime_config *rtc);
 static void daemonize(void);
+static void wait_state_change(struct runtime_config *rtc);
 static void stop_server(struct runtime_config *restrict rtc);
 static void catch_stop(const int sig);
 static void run_server(struct runtime_config *rtc);

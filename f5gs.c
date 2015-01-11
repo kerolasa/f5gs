@@ -50,6 +50,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/epoll.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <sys/socket.h>
@@ -134,63 +135,125 @@ static void __attribute__((__noreturn__))
 	exit(EXIT_FAILURE);
 }
 
-static void __attribute__((__noreturn__)) *handle_request(void *voidpt)
+static int make_socket_none_blocking(struct runtime_config *restrict rtc, int socket)
 {
-	struct socket_pass *sp = voidpt;
-	char io_buf[IGNORE_BYTES];
+	int flags;
+	if ((flags = fcntl(socket, F_GETFL)) < 0) {
+		warnlog(rtc, "fcntl F_GETFL failed");
+		return -1;
+	}
+	flags |= O_NONBLOCK;
+	if (fcntl(socket, F_SETFL, flags) < 0) {
+		warnlog(rtc, "fcntl F_SETFL failed");
+		return -1;
+	}
+	return 0;
+}
+
+static void accept_connection(struct runtime_config *restrict rtc)
+{
+	int client_socket;
+	struct sockaddr_in client_addr;
+	socklen_t addr_len = sizeof client_addr;
 	const struct timeval timeout = {
 		.tv_sec = 1,
 		.tv_usec = 0
 	};
+	struct epoll_event event;
+
+	if ((client_socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len)) < 0) {
+		warnlog(rtc, "accept failed");
+		return;
+	}
+	pthread_rwlock_rdlock(&rtc->lock);
+	if (send(client_socket, state_message[rtc->current_state], rtc->message_length, 0) < 0) {
+		pthread_rwlock_unlock(&rtc->lock);
+		warnlog(rtc, "send failed");
+		return;
+	}
+	pthread_rwlock_unlock(&(rtc->lock));
+	if (make_socket_none_blocking(rtc, client_socket)) {
+		warnlog(rtc, "fcntl none-blocking failed");
+		return;
+	}
+	if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout))) {
+		warnlog(rtc, "setsockopt failed");
+		return;
+	}
+	event.events = EPOLLIN | EPOLLET;
+	event.data.fd = client_socket;
+	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, client_socket, &event) < 0) {
+		warnlog(rtc, "epoll_ctl failed");
+		return;
+	}
+}
+
+static void write_reason(struct runtime_config *restrict rtc, int socket)
+{
+	char io_buf[IGNORE_BYTES];
 	enum {
 		SECONDS_IN_DAY = 86400,
 		SECONDS_IN_HOUR = 3600,
 		SECONDS_IN_MIN = 60
 	};
 
-	pthread_detach(pthread_self());
-	pthread_rwlock_rdlock(&(sp->rtc->lock));
-	if (send(sp->socket, state_message[sp->rtc->current_state], sp->rtc->message_length, 0) < 0) {
-		pthread_rwlock_unlock(&(sp->rtc->lock));
-		warnlog(sp->rtc, "send failed");
-		goto alldone;
-	}
-	pthread_rwlock_unlock(&(sp->rtc->lock));
-	/* wait a second if client wants more info */
-	io_buf[0] = '\0';
-	if (setsockopt(sp->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout))) {
-		warnlog(sp->rtc, "setsockopt failed");
-		goto alldone;
-	}
-	if (recv(sp->socket, io_buf, sizeof(io_buf), 0) < 0) {
+	if (recv(socket, io_buf, sizeof(io_buf), 0) < 0) {
 		if (errno != EAGAIN)
-			warnlog(sp->rtc, "receive failed");
-		goto alldone;
+			warnlog(rtc, "receive failed");
+		return;
 	}
 	if (!strcmp(io_buf, WHYWHEN)) {
 		struct timeval now, delta;
 
-		if (send(sp->socket, sp->rtc->current_reason, strlen(sp->rtc->current_reason), 0) < 0) {
-			warnlog(sp->rtc, "sending reason failed");
-			goto alldone;
+		if (send(socket, rtc->current_reason, strlen(rtc->current_reason), 0) < 0) {
+			warnlog(rtc, "sending reason failed");
 		}
 		gettimeofday(&now, NULL);
-		if (timercmp(&now, &sp->rtc->previous_change, <))
+		if (timercmp(&now, &rtc->previous_change, <))
 			/* time went backwards, ignore result */ ;
 		else {
-			timersub(&now, &sp->rtc->previous_change, &delta);
+			timersub(&now, &rtc->previous_change, &delta);
 			int len = sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld ago",
 					  delta.tv_sec / SECONDS_IN_DAY,
 					  delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
 					  delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
 					  delta.tv_sec % SECONDS_IN_MIN);
-			if (send(sp->socket, io_buf, len, 0) < 0)
-				warnlog(sp->rtc, "send failed");
+			if (send(socket, io_buf, len, 0) < 0)
+				warnlog(rtc, "send failed");
 		}
 	}
-alldone:
-	close(sp->socket);
-	free(sp);
+}
+
+static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
+{
+	struct runtime_config *rtc = voidpt;
+	struct epoll_event *events;
+	int r, i;
+
+	events = xcalloc(NUM_EVENTS, sizeof(struct epoll_event));
+	while (daemon_running) {
+		r = epoll_wait(rtc->epollfd, events, NUM_EVENTS, -1);
+		if (r < 0) {
+			if (errno == EINTR)
+				continue;
+			warnlog(rtc, "epoll_wait failed");
+			continue;
+		}
+		for (i = 0; i < r; i++) {
+			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)
+			    || (!(events[i].events & EPOLLIN))) {
+				close(events[i].data.fd);
+				continue;
+			}
+			if (events[i].data.fd == rtc->server_socket)
+				accept_connection(rtc);
+			else {
+				write_reason(rtc, events[i].data.fd);
+				close(events[i].data.fd);
+			}
+		}
+	}
+	free(events);
 	pthread_exit(NULL);
 }
 
@@ -346,9 +409,8 @@ static void daemonize(void)
 	close(fd);
 }
 
-static void *state_change_thread(void *arg)
+static void wait_state_change(struct runtime_config *rtc)
 {
-	struct runtime_config *rtc = arg;
 	int msqid;
 	struct state_change_msg buf;
 
@@ -409,7 +471,6 @@ static void *state_change_thread(void *arg)
 		update_pid_file(rtc);
 		pthread_rwlock_unlock(&rtc->lock);
 	}
-	pthread_exit(0);
 }
 
 static void stop_server(struct runtime_config *restrict rtc)
@@ -420,8 +481,8 @@ static void stop_server(struct runtime_config *restrict rtc)
 	sd_notify(0, "STOPPING=1");
 #endif
 	daemon_running = 0;
-	pthread_kill(rtc->chstate_thread, SIGHUP);
-	pthread_join(rtc->chstate_thread, NULL);
+	pthread_kill(rtc->worker, SIGHUP);
+	pthread_join(rtc->worker, NULL);
 	pthread_rwlock_destroy(&rtc->lock);
 	qid = msgget(rtc->ipc_key, 0600);
 	msgctl(qid, IPC_RMID, NULL);
@@ -448,10 +509,21 @@ static void catch_stop(const int sig __attribute__((unused)))
 	daemon_running = 0;
 }
 
+static void create_worker(struct runtime_config *restrict rtc)
+{
+	pthread_attr_t attr;
+
+	if (pthread_attr_init(&attr))
+		faillog(rtc, "cannot init thread attribute");
+	if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED))
+		faillog(rtc, "cannot use PTHREAD_CREATE_DETACHED");
+	if (pthread_create(&rtc->worker, NULL, handle_requests, rtc))
+		faillog(rtc, "could not create worker thread");
+}
+
 static void run_server(struct runtime_config *restrict rtc)
 {
-	struct sockaddr_in client_addr;
-	socklen_t addr_len;
+	struct epoll_event event;
 	pthread_attr_t attr;
 	struct sigaction sigact = {
 		.sa_handler = catch_stop,
@@ -476,6 +548,8 @@ static void run_server(struct runtime_config *restrict rtc)
 			err(EXIT_FAILURE, "cannot set socket options");
 		if (bind(rtc->server_socket, rtc->res->ai_addr, rtc->res->ai_addrlen))
 			err(EXIT_FAILURE, "unable to bind");
+		if (make_socket_none_blocking(rtc, rtc->server_socket))
+			err(EXIT_FAILURE, "cannot set server socket none-blocking");
 		if (listen(rtc->server_socket, SOMAXCONN))
 			err(EXIT_FAILURE, "unable to listen");
 	}
@@ -487,6 +561,14 @@ static void run_server(struct runtime_config *restrict rtc)
 
 	if (!rtc->run_foreground)
 		daemonize();
+	daemon_running = 1;
+	if ((rtc->epollfd = epoll_create1(0)) < 0)
+		faillog(rtc, "epoll_create failed");
+	event.events = EPOLLIN | EPOLLET;
+	event.data.fd = rtc->server_socket;
+	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, rtc->server_socket, &event) < 0)
+		faillog(rtc, "epoll_ctl add socket failed");
+	create_worker(rtc);
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service started", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START), "STATE=%s",
 			state_message[rtc->current_state], "PRIORITY=%d", LOG_INFO, NULL);
@@ -495,9 +577,6 @@ static void run_server(struct runtime_config *restrict rtc)
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 	syslog(LOG_INFO, "started in state %s", state_message[rtc->current_state]);
 #endif
-	daemon_running = 1;
-	if (pthread_create(&rtc->chstate_thread, NULL, &state_change_thread, (void *)rtc))
-		faillog(rtc, "could not start state changer thread");
 	/* clean up after receiving signal */
 	sigemptyset(&sigact.sa_mask);
 	sigaction(SIGHUP, &sigact, NULL);
@@ -506,23 +585,8 @@ static void run_server(struct runtime_config *restrict rtc)
 	sigaction(SIGTERM, &sigact, NULL);
 	sigaction(SIGUSR1, &sigact, NULL);
 	sigaction(SIGUSR2, &sigact, NULL);
-	while (daemon_running) {
-		pthread_t thread;
-		struct socket_pass *sp;
-
-		sp = xmalloc(sizeof(struct socket_pass));
-		sp->rtc = rtc;
-		addr_len = sizeof(client_addr);
-		sp->socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len);
-		if (sp->socket < 0) {
-			free(sp);
-			if (errno == EINTR || errno == ECONNABORTED)
-				continue;
-			faillog(rtc, "could not accept connection");
-		}
-		if (pthread_create(&thread, NULL, handle_request, sp))
-			warnlog(sp->rtc, "could not create handle_request thread");
-	}
+	while (daemon_running)
+		wait_state_change(rtc);
 	stop_server(rtc);
 }
 
@@ -620,7 +684,7 @@ static char *get_server_status(const struct runtime_config *restrict rtc)
 		};
 		if (send(sfd, WHYWHEN, sizeof(WHYWHEN), 0) < 0)
 			err(EXIT_FAILURE, "sending why request failed");
-		/* this gives handle_request() time to write both status
+		/* this gives handle_requests() time to write both status
 		 * and reason to socket */
 		nanosleep(&waittime, NULL);
 	}
