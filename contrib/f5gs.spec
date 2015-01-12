@@ -1,7 +1,7 @@
 # Wben building an rpm from random git revision create a tag
 # something like:
 #
-#	git tag -a v0.5.1
+#	git tag -a v1.1.1
 #
 # followed by
 #
@@ -14,7 +14,7 @@
 # rpmbuild --nodeps -ba contrib/f5gs.spec
 
 Name:		f5gs
-Version:	0.5.1
+Version:	1.1
 Release:	1
 Summary:	F5 Graceful Scaling helper daemon
 Group:		System Environment/Daemons
@@ -56,8 +56,19 @@ make %{?_smp_mflags}
 %{__make} install DESTDIR=%{buildroot}
 %{__install} -p -D -m 755 contrib/init.redhat %{buildroot}%{_initddir}/%{name}
 
-%post
+%pre
+if [ "$1" = "2" ]; then
+	# Upgrade.
+	if [ "$(f5gs --version | awk '{print $3}')" = "1.0" ]; then
+		# From 1.0.  This version made status file blank at
+		# startup.  Commit that fixed the issue is:
+		# f996b927d01765765678ff9d4f934184900f3c80
+		find /var/lib/f5gs -size 0 -delete
+		pkill -TERM f5gs
+	fi
+fi
 
+%post
 if [ $1 -eq 1 ] ; then
 	# Install
 	/sbin/chkconfig --add %{name} || :
