@@ -302,6 +302,7 @@ static int open_pid_file(struct runtime_config *restrict rtc)
 
 static void update_pid_file(const struct runtime_config *restrict rtc)
 {
+	ftruncate(fileno(rtc->pid_filefd), 0);
 	rewind(rtc->pid_filefd);
 	fprintf(rtc->pid_filefd, "%u %d %d\n", getpid(), rtc->current_state, STATE_FILE_VERSION);
 	fprintf(rtc->pid_filefd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec,
