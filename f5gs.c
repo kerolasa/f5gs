@@ -434,15 +434,7 @@ static void wait_state_change(struct runtime_config *rtc)
 		if (msgrcv(msqid, &buf, sizeof(buf.info), IPC_MSG_ID, MSG_NOERROR) == -1) {
 			if (errno == EINTR)
 				continue;
-#ifdef HAVE_LIBSYSTEMD
-			char ebuf[256];
-			if (strerror_r(errno, ebuf, sizeof(ebuf)))
-				sd_journal_send("MESSAGE=receiving ipc message failed", "MESSAGE_ID=%s",
-						SD_ID128_CONST_STR(MESSAGE_ERROR), "STRERROR=%s", ebuf, "PRIORITY=%d",
-						LOG_ERR, NULL);
-#else
-			syslog(LOG_ERR, "receiving ipc message failed");
-#endif
+			warnlog(rtc, "receiving ipc message failed");
 			continue;
 		}
 		if (!valid_state(buf.info.nstate)) {
@@ -456,15 +448,7 @@ static void wait_state_change(struct runtime_config *rtc)
 			continue;
 		}
 		if (pthread_rwlock_wrlock(&rtc->lock)) {
-#ifdef HAVE_LIBSYSTEMD
-			char ebuf[256];
-			if (strerror_r(errno, ebuf, sizeof(ebuf)))
-				sd_journal_send("MESSAGE=could not get state change lock", "MESSAGE_ID=%s",
-						SD_ID128_CONST_STR(MESSAGE_ERROR), "STRERROR=%s", ebuf, "PRIORITY=%d",
-						LOG_ERR, NULL);
-#else
-			syslog(LOG_ERR, "could not get state change lock");
-#endif
+			warnlog(rtc, "could not get state change lock");
 			continue;
 		}
 #ifdef HAVE_LIBSYSTEMD
