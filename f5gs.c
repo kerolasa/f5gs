@@ -165,7 +165,10 @@ static void accept_connection(struct runtime_config *restrict rtc)
 		warnlog(rtc, "accept failed");
 		return;
 	}
-	pthread_rwlock_rdlock(&rtc->lock);
+	if (pthread_rwlock_rdlock(&rtc->lock)) {
+		warnlog(rtc, "thread read-lock failed");
+		return;
+	}
 	if (send(client_socket, state_message[rtc->current_state], rtc->message_length, 0) < 0) {
 		pthread_rwlock_unlock(&rtc->lock);
 		warnlog(rtc, "send failed");
@@ -230,7 +233,7 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 	struct epoll_event *events;
 	int r, i;
 
-	events = xcalloc(NUM_EVENTS, sizeof(struct epoll_event));
+	events = xmalloc(NUM_EVENTS * sizeof(struct epoll_event));
 	while (daemon_running) {
 		r = epoll_wait(rtc->epollfd, events, NUM_EVENTS, -1);
 		if (r < 0) {
@@ -261,9 +264,9 @@ static char *construct_pid_file(struct runtime_config *restrict rtc)
 {
 	char *path;
 	void *p;
-	const char *last_slash = strrchr(rtc->state_dir, '/');
 	char s[INET6_ADDRSTRLEN];
 	int separator = 0, ret;
+	const char *last_slash = strrchr(rtc->state_dir, '/');
 
 	if (last_slash && *(last_slash + 1) != '\0' && *(last_slash + 1) != '/')
 		separator = 1;
@@ -302,7 +305,10 @@ static int open_pid_file(struct runtime_config *restrict rtc)
 
 static void update_pid_file(const struct runtime_config *restrict rtc)
 {
-	ftruncate(fileno(rtc->pid_filefd), 0);
+	if (ftruncate(fileno(rtc->pid_filefd), 0)) {
+		warnlog(rtc, "pid_file ftruncate failed");
+		return;
+	}
 	rewind(rtc->pid_filefd);
 	fprintf(rtc->pid_filefd, "%u %d %d\n", getpid(), rtc->current_state, STATE_FILE_VERSION);
 	fprintf(rtc->pid_filefd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec,
@@ -328,7 +334,7 @@ static int close_pid_file(struct runtime_config *restrict rtc)
 	return 0;
 }
 
-static void add_tstamp_to_reason(struct runtime_config *restrict rtc)
+static int add_tstamp_to_reason(struct runtime_config *restrict rtc)
 {
 	char explanation[MAX_MESSAGE];
 	char *p = explanation;
@@ -338,8 +344,14 @@ static void add_tstamp_to_reason(struct runtime_config *restrict rtc)
 	prev_c = rtc->previous_change.tv_sec;
 	*p = '\n';
 	p++;
-	localtime_r(&prev_c, &prev_tm);
-	strftime(p, 20, "%Y-%m-%dT%H:%M:%S", &prev_tm);
+	if (localtime_r(&prev_c, &prev_tm) == NULL) {
+		warnlog(rtc, "localtime_r() failed");
+		return 1;
+	}
+	if (strftime(p, 20, "%Y-%m-%dT%H:%M:%S", &prev_tm) == 0) {
+		warnlog(rtc, "strftime failed");
+		return 1;
+	}
 	p += strlen(p);
 	snprintf(p, 7, ",%06ld", rtc->previous_change.tv_usec);
 	p += strlen(p);
@@ -347,6 +359,7 @@ static void add_tstamp_to_reason(struct runtime_config *restrict rtc)
 	p += strlen(p);
 	strcpy(p, rtc->current_reason);
 	strcpy(rtc->current_reason, explanation);
+	return 0;
 }
 
 static int valid_state(const int state)
@@ -468,8 +481,8 @@ static void wait_state_change(struct runtime_config *rtc)
 		rtc->message_length = strlen(state_message[rtc->current_state]);
 		strcpy(rtc->current_reason, buf.info.reason);
 		gettimeofday(&rtc->previous_change, NULL);
-		add_tstamp_to_reason(rtc);
-		update_pid_file(rtc);
+		if (add_tstamp_to_reason(rtc) == 0)
+			update_pid_file(rtc);
 		pthread_rwlock_unlock(&rtc->lock);
 	}
 }
@@ -520,6 +533,12 @@ static void create_worker(struct runtime_config *restrict rtc)
 		faillog(rtc, "cannot use PTHREAD_CREATE_DETACHED");
 	if (pthread_create(&rtc->worker, NULL, handle_requests, rtc))
 		faillog(rtc, "could not create worker thread");
+}
+
+static void setup_sigaction(struct runtime_config *restrict rtc, int sig, struct sigaction *sigact)
+{
+	if (sigaction(sig, sigact, NULL))
+		faillog(rtc, "sigaction failed");
 }
 
 static void run_server(struct runtime_config *restrict rtc)
@@ -583,13 +602,26 @@ static void run_server(struct runtime_config *restrict rtc)
 	syslog(LOG_INFO, "started in state %s", state_message[rtc->current_state]);
 #endif
 	/* clean up after receiving signal */
-	sigemptyset(&sigact.sa_mask);
-	sigaction(SIGHUP, &sigact, NULL);
-	sigaction(SIGINT, &sigact, NULL);
-	sigaction(SIGQUIT, &sigact, NULL);
-	sigaction(SIGTERM, &sigact, NULL);
-	sigaction(SIGUSR1, &sigact, NULL);
-	sigaction(SIGUSR2, &sigact, NULL);
+	if (sigemptyset(&sigact.sa_mask))
+		faillog(rtc, "sigemptyset failed");
+#ifdef SIGHUP
+	setup_sigaction(rtc, SIGHUP,  &sigact);
+#endif
+#ifdef SIGINT
+	setup_sigaction(rtc, SIGINT,  &sigact);
+#endif
+#ifdef SIGQUIT
+	setup_sigaction(rtc, SIGQUIT,  &sigact);
+#endif
+#ifdef SIGTERM
+	setup_sigaction(rtc, SIGTERM,  &sigact);
+#endif
+#ifdef SIGUSR1
+	setup_sigaction(rtc, SIGUSR1,  &sigact);
+#endif
+#ifdef SIGUSR2
+	setup_sigaction(rtc, SIGUSR2,  &sigact);
+#endif
 	while (daemon_running)
 		wait_state_change(rtc);
 	stop_server(rtc);
@@ -613,7 +645,8 @@ static int run_script(const struct runtime_config *restrict rtc, const char *res
 #else
 		environ = NULL;
 #endif
-		setenv("PATH", _PATH_STDPATH, 1);
+		if (setenv("PATH", _PATH_STDPATH, 1) < 0)
+			err(EXIT_FAILURE, "cannot setenv");
 		exit(execv(script, rtc->argv));
 	}
 	while (child) {
@@ -640,7 +673,10 @@ static int change_state(struct runtime_config *restrict rtc)
 	buf.info.nstate = rtc->new_state;
 	buf.info.uid = getuid();
 	buf.info.pid = getpid();
-	ttyname_r(STDIN_FILENO, buf.info.tty, TTY_NAME_LEN);
+	if (ttyname_r(STDIN_FILENO, buf.info.tty, TTY_NAME_LEN) != 0) {
+		if (errno != ENOTTY)
+			warn("ttyname_r failed");
+	}
 	if (rtc->new_reason)
 		memcpy(buf.info.reason, rtc->new_reason, strlen(rtc->new_reason) + 1);
 	else
@@ -650,7 +686,7 @@ static int change_state(struct runtime_config *restrict rtc)
 	if ((rtc->ipc_key = ftok(rtc->pid_file, buf.mtype)) < 0)
 		errx(EXIT_FAILURE, "ftok: is f5gs server process running?");
 	if ((qid = msgget(rtc->ipc_key, 0600)) < 0)
-		errx(EXIT_FAILURE, "msgget: ipc_key not found, a version mismatch?");
+		errx(EXIT_FAILURE, "msgget failed: server stopped or a version mismatch?");
 	if (msgsnd(qid, (void *)&buf, sizeof(buf.info), 0) != 0)
 		err(EXIT_FAILURE, "ipc message sending failed");
 	if (run_script(rtc, F5GS_POST) && !rtc->force)
@@ -866,7 +902,8 @@ int main(const int argc, char **argv)
 		gettimeofday(&rtc.previous_change, NULL);
 		memcpy(rtc.current_reason, "<program started>", 18);
 		read_status_from_file(&rtc);
-		add_tstamp_to_reason(&rtc);
+		if (add_tstamp_to_reason(&rtc))
+			exit(EXIT_FAILURE);
 		open_pid_file(&rtc);
 		update_pid_file(&rtc);
 		if (!(rtc.ipc_key = ftok(rtc.pid_file, IPC_MSG_ID)))
