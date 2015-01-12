@@ -562,7 +562,11 @@ static void run_server(struct runtime_config *restrict rtc)
 	if (!rtc->run_foreground)
 		daemonize();
 	daemon_running = 1;
+#ifdef HAVE_EPOLL_CREATE1
 	if ((rtc->epollfd = epoll_create1(0)) < 0)
+#else
+	if ((rtc->epollfd = epoll_create(NUM_EVENTS)) < 0)
+#endif
 		faillog(rtc, "epoll_create failed");
 	event.events = EPOLLIN | EPOLLET;
 	event.data.fd = rtc->server_socket;

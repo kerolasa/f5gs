@@ -53,6 +53,8 @@ AC_TYPE_SSIZE_T
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([ \
 	clearenv \
+	epoll_create \
+	epoll_create1 \
 ])
 
 AC_ARG_WITH([systemd],
