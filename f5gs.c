@@ -56,10 +56,13 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#ifdef HAVE_TIMERFD_CREATE
 #include <sys/timerfd.h>
+#endif
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <syslog.h>
+#include <time.h>
 #include <unistd.h>
 
 #ifdef HAVE_SYS_SOCKET_H
@@ -153,15 +156,24 @@ static int make_socket_none_blocking(struct runtime_config *restrict rtc, int so
 
 static void accept_connection(struct runtime_config *restrict rtc)
 {
-	int client_socket, tfd;
+	int client_socket;
 	struct sockaddr_in client_addr;
 	socklen_t addr_len = sizeof client_addr;
 	struct epoll_event event;
+	struct f5gs_action *socket_action = xmalloc(sizeof(struct f5gs_action));
+
+#ifdef HAVE_TIMERFD_CREATE
+	/* FIXME: on older system that do not have timerfd_create()
+	 * there is no timeout, that makes this software to be easy to
+	 * to DoS.  For example RHEL4 is this sort of system.
+	 * Unfortunately I do not have time right now (2015-01-15)
+	 * correct this issue; getting bug fix release to correct pid
+	 * file handling has greater priority. */
+	int tfd;
 	struct timespec now;
 	struct itimerspec timeout;
-	struct f5gs_action *socket_action = xmalloc(sizeof(struct f5gs_action));
 	struct f5gs_action *timer_action = xmalloc(sizeof(struct f5gs_action));
-
+#endif
 	if ((client_socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len)) < 0) {
 		warnlog(rtc, "accept failed");
 		return;
@@ -180,19 +192,24 @@ static void accept_connection(struct runtime_config *restrict rtc)
 		warnlog(rtc, "fcntl none-blocking failed");
 		return;
 	}
+#ifdef HAVE_TIMERFD_CREATE
 	if ((tfd = timerfd_create(CLOCK_REALTIME, 0)) < 0) {
 		warnlog(rtc, "timerfd_create failed");
 		return;
 	}
+#endif
 	event.events = EPOLLIN | EPOLLET;
 	event.data.ptr = socket_action;
 	socket_action->fd = client_socket;
+#ifdef HAVE_TIMERFD_CREATE
 	socket_action->p = timer_action;
+#endif
 	socket_action->is_socket = 1;
 	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, client_socket, &event) < 0) {
 		warnlog(rtc, "epoll_ctl failed");
 		return;
 	}
+#ifdef HAVE_TIMERFD_CREATE
 	event.events = EPOLLIN;
 	event.data.ptr = timer_action;
 	timer_action->fd = tfd;
@@ -214,6 +231,7 @@ static void accept_connection(struct runtime_config *restrict rtc)
 		warnlog(rtc, "epoll_ctl timeout failed");
 		return;
 	}
+#endif
 }
 
 static void write_reason(struct runtime_config *restrict rtc, int socket)
@@ -280,8 +298,10 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 			struct f5gs_action *action = (struct f5gs_action *) events[i].data.ptr;
 			if (action->is_socket)
 				write_reason(rtc, action->fd);
+#ifdef HAVE_TIMERFD_CREATE
 			close(action->p->fd);
 			free(action->p);
+#endif
 			close(action->fd);
 			free(action);
 		}

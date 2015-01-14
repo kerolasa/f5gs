@@ -55,7 +55,18 @@ AC_CHECK_FUNCS([ \
 	clearenv \
 	epoll_create \
 	epoll_create1 \
+	timerfd_create \
 ])
+
+dnl Old glibc requires -lrt when clock_gettime() is used.
+dnl RHEL6 is such system.
+AC_CHECK_FUNCS([clock_gettime], [], [
+	AC_CHECK_LIB([rt], [clock_gettime], [
+		AC_DEFINE([HAVE_CLOCK_GETTIME], [1])
+		CLOCKGETTIME_LIBS="-lrt"
+	])
+])
+AC_SUBST([CLOCKGETTIME_LIBS])
 
 AC_ARG_WITH([systemd],
 	AS_HELP_STRING([--with-systemd], [build with support for systemd]),
