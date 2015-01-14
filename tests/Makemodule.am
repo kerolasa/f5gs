@@ -10,7 +10,8 @@ TESTS = \
 	tests/disable \
 	tests/maintenance \
 	tests/long-reason \
-	tests/stop-server
+	tests/stop-server \
+	tests/restart
 
 EXTRA_DIST += \
 	tests/init.sh \
