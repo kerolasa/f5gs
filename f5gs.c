@@ -56,6 +56,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/timerfd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <syslog.h>
@@ -152,14 +153,14 @@ static int make_socket_none_blocking(struct runtime_config *restrict rtc, int so
 
 static void accept_connection(struct runtime_config *restrict rtc)
 {
-	int client_socket;
+	int client_socket, tfd;
 	struct sockaddr_in client_addr;
 	socklen_t addr_len = sizeof client_addr;
-	const struct timeval timeout = {
-		.tv_sec = 1,
-		.tv_usec = 0
-	};
 	struct epoll_event event;
+	struct timespec now;
+	struct itimerspec timeout;
+	struct f5gs_action *socket_action = xmalloc(sizeof(struct f5gs_action));
+	struct f5gs_action *timer_action = xmalloc(sizeof(struct f5gs_action));
 
 	if ((client_socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len)) < 0) {
 		warnlog(rtc, "accept failed");
@@ -179,14 +180,38 @@ static void accept_connection(struct runtime_config *restrict rtc)
 		warnlog(rtc, "fcntl none-blocking failed");
 		return;
 	}
-	if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout))) {
-		warnlog(rtc, "setsockopt failed");
+	if ((tfd = timerfd_create(CLOCK_REALTIME, 0)) < 0) {
+		warnlog(rtc, "timerfd_create failed");
 		return;
 	}
 	event.events = EPOLLIN | EPOLLET;
-	event.data.fd = client_socket;
+	event.data.ptr = socket_action;
+	socket_action->fd = client_socket;
+	socket_action->p = timer_action;
+	socket_action->is_socket = 1;
 	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, client_socket, &event) < 0) {
 		warnlog(rtc, "epoll_ctl failed");
+		return;
+	}
+	event.events = EPOLLIN;
+	event.data.ptr = timer_action;
+	timer_action->fd = tfd;
+	timer_action->p = socket_action;
+	timer_action->is_socket = 0;
+	if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
+		warnlog(rtc, "clock_gettime failed");
+		return;
+	}
+	timeout.it_interval.tv_sec = 0;
+	timeout.it_interval.tv_nsec = 0;
+	timeout.it_value.tv_sec = now.tv_sec + 1;
+	timeout.it_value.tv_nsec = now.tv_nsec;
+	if (timerfd_settime(tfd, TFD_TIMER_ABSTIME, &timeout, NULL) < 0) {
+		warnlog(rtc, "timerfd_settime failed");
+		return;
+	}
+	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, tfd, &event) < 0) {
+		warnlog(rtc, "epoll_ctl timeout failed");
 		return;
 	}
 }
@@ -248,12 +273,17 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 				close(events[i].data.fd);
 				continue;
 			}
-			if (events[i].data.fd == rtc->server_socket)
+			if (events[i].data.fd == rtc->server_socket) {
 				accept_connection(rtc);
-			else {
-				write_reason(rtc, events[i].data.fd);
-				close(events[i].data.fd);
+				continue;
 			}
+			struct f5gs_action *action = (struct f5gs_action *) events[i].data.ptr;
+			if (action->is_socket)
+				write_reason(rtc, action->fd);
+			close(action->p->fd);
+			free(action->p);
+			close(action->fd);
+			free(action);
 		}
 	}
 	free(events);

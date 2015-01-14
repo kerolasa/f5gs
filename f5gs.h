@@ -22,6 +22,12 @@ static const char *state_message[] = {
 	[STATE_UNKNOWN] = "unknown"
 };
 
+struct f5gs_action {
+	int fd;
+	int is_socket;
+	struct f5gs_action *p;
+};
+
 enum {
 	STATE_FILE_VERSION = 1,
 	IPC_MSG_ID = 2,
