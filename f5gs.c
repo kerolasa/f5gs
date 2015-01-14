@@ -613,8 +613,10 @@ static void run_server(struct runtime_config *restrict rtc)
 	if (pthread_rwlock_init(&rtc->lock, NULL))
 		err(EXIT_FAILURE, "cannot init read-write lock");
 
-	if (!rtc->run_foreground)
+	if (!rtc->run_foreground) {
 		daemonize();
+		update_pid_file(rtc);
+	}
 	daemon_running = 1;
 #ifdef HAVE_EPOLL_CREATE1
 	if ((rtc->epollfd = epoll_create1(0)) < 0)
