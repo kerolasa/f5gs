@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.69])
+AC_PREREQ([2.59])
 AC_CONFIG_MACRO_DIR([m4])
 AC_INIT([f5gs],
 	[m4_esyscmd([build-aux/git-version-gen .tarball-version])],
