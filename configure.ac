@@ -68,6 +68,14 @@ AC_CHECK_FUNCS([clock_gettime], [], [
 ])
 AC_SUBST([CLOCKGETTIME_LIBS])
 
+dnl pthread_setname_np is an addition to glibc 2.12, and might be
+dnl missing from some systems, such as RHEL5.
+AC_CHECK_FUNCS([pthread_setname_np], [], [
+	AC_CHECK_LIB([pthread], [pthread_setname_np], [
+		AC_DEFINE([HAVE_PTHREAD_SETNAME_NP], [1])
+	])
+])
+
 AC_ARG_WITH([systemd],
 	AS_HELP_STRING([--with-systemd], [build with support for systemd]),
 	[], [with_systemd=check]

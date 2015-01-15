@@ -276,6 +276,9 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 	struct epoll_event *events;
 	int r, i;
 
+#ifdef HAVE_PTHREAD_SETNAME_NP
+	pthread_setname_np(pthread_self(), "handle_requests");
+#endif
 	events = xmalloc(NUM_EVENTS * sizeof(struct epoll_event));
 	while (daemon_running) {
 		r = epoll_wait(rtc->epollfd, events, NUM_EVENTS, -1);
