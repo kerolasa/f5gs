@@ -160,7 +160,7 @@ static void accept_connection(struct runtime_config *restrict rtc)
 	struct sockaddr_in client_addr;
 	socklen_t addr_len = sizeof client_addr;
 	struct epoll_event event;
-	struct f5gs_action *socket_action = xmalloc(sizeof(struct f5gs_action));
+	struct f5gs_action *socket_action = malloc(sizeof(struct f5gs_action));
 
 #ifdef HAVE_TIMERFD_CREATE
 	/* FIXME: on older system that do not have timerfd_create()
@@ -172,8 +172,16 @@ static void accept_connection(struct runtime_config *restrict rtc)
 	int tfd;
 	struct timespec now;
 	struct itimerspec timeout;
-	struct f5gs_action *timer_action = xmalloc(sizeof(struct f5gs_action));
+	struct f5gs_action *timer_action = malloc(sizeof(struct f5gs_action));
 #endif
+	if (socket_action == NULL
+#ifdef HAVE_TIMERFD_CREATE
+		|| timer_action == NULL
+#endif
+	) {
+		warnlog(rtc, "could not allocate memory");
+		return;
+	}
 	if ((client_socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len)) < 0) {
 		warnlog(rtc, "accept failed");
 		return;
