@@ -78,23 +78,8 @@ struct state_change_msg {
 	struct state_info info;
 };
 
-static void __attribute__((__noreturn__)) usage(FILE *out);
-static void warnlog(const struct runtime_config *restrict rtc, const char *restrict msg);
-static void __attribute__((__noreturn__)) faillog(struct runtime_config *rtc, const char *msg);
-static void *handle_requests(void *voidpt);
-static char *construct_pid_file(struct runtime_config *rtc);
-static int open_pid_file(struct runtime_config *restrict rtc);
-static void update_pid_file(const struct runtime_config *rtc);
-static int close_pid_file(struct runtime_config *restrict rtc);
-static void read_status_from_file(struct runtime_config *rtc);
-static void daemonize(void);
-static void wait_state_change(struct runtime_config *rtc);
-static void stop_server(struct runtime_config *restrict rtc);
-static void catch_stop(const int sig);
-static void run_server(struct runtime_config *rtc);
-static int run_script(const struct runtime_config *rtc, const char *script);
-static int change_state(struct runtime_config *rtc);
-static char *get_server_status(const struct runtime_config *rtc);
-static int set_server_status(struct runtime_config *rtc);
+void start_server(struct runtime_config *rtc);
+char *get_server_status(const struct runtime_config *rtc);
+int set_server_status(struct runtime_config *rtc);
 
 #endif				/* F5GS_HEADER_H */
