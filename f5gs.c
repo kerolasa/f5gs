@@ -190,7 +190,7 @@ int main(const int argc, char **argv)
 			rtc.quiet = 1;
 			break;
 		case REASON_OPT:
-			if (REASON_TEXT < strlen(optarg)) {
+			if (REASON_TEXT <= strlen(optarg)) {
 				warnx("too long reason, truncating to %d characters", REASON_TEXT - 1);
 				optarg[REASON_TEXT - 1] = '\0';
 			}
