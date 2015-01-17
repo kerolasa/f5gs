@@ -109,6 +109,15 @@ running
 .PD
 .RE
 .TP
+\fB\-\-reason\fR=\fItext\fR
+Add reason text to state change.  The text is meant for human consumption.
+.TP
+\fB\-\-why\fR
+Request reason why the current state is set.  The output will always
+contain timestamp information when the program state has last time
+altered.  The timestamp can persist over system reboots, as long the
+state file is intact.
+.TP
 \fB\-\-no\-scripts\fR
 Skip running pre or post scripts at status change.
 .TP
