@@ -452,7 +452,8 @@ static void wait_state_change(struct runtime_config *rtc)
 #endif
 		rtc->current_state = buf.info.nstate;
 		rtc->message_length = strlen(state_message[rtc->current_state]);
-		strcpy(rtc->current_reason, buf.info.reason);
+		memcpy(rtc->current_reason, buf.info.reason, REASON_TEXT);
+		rtc->current_reason[REASON_TEXT - 1] = '\0';
 		gettimeofday(&rtc->previous_change, NULL);
 		if (add_tstamp_to_reason(rtc) == 0)
 			update_pid_file(rtc);
