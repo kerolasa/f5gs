@@ -325,29 +325,24 @@ static int close_pid_file(struct runtime_config *restrict rtc)
 
 static int add_tstamp_to_reason(struct runtime_config *restrict rtc)
 {
-	char explanation[MAX_MESSAGE];
-	char *p = explanation;
 	time_t prev_c;
 	struct tm prev_tm;
+	char last[7];
 
+	rtc->current_reason[0] = '\n';
 	prev_c = rtc->previous_change.tv_sec;
-	*p = '\n';
-	p++;
 	if (localtime_r(&prev_c, &prev_tm) == NULL) {
 		warnlog(rtc, "localtime_r() failed");
 		return 1;
 	}
-	if (strftime(p, 20, "%Y-%m-%dT%H:%M:%S", &prev_tm) == 0) {
+	if (strftime(rtc->current_reason + 1, 20, "%Y-%m-%dT%H:%M:%S", &prev_tm) == 0) {
 		warnlog(rtc, "strftime failed");
 		return 1;
 	}
-	p += strlen(p);
-	snprintf(p, 7, ",%06ld", rtc->previous_change.tv_usec);
-	p += strlen(p);
-	strftime(p, 7, "%z ", &prev_tm);
-	p += strlen(p);
-	strcpy(p, rtc->current_reason);
-	strcpy(rtc->current_reason, explanation);
+	snprintf(rtc->current_reason + 20, 7, ",%06ld", rtc->previous_change.tv_usec);
+	strftime(last, 7, "%z ", &prev_tm);
+	/* do not null terminate timestamp */
+	memcpy(rtc->current_reason + 26, last, 6);
 	return 0;
 }
 
@@ -375,8 +370,8 @@ static void read_status_from_file(struct runtime_config *restrict rtc)
 		if (fscanf(pidfd, "%10ld.%6ld:", &(rtc->previous_change.tv_sec), &(rtc->previous_change.tv_usec)) != 2
 		    || errno != 0)
 			goto err;
-		len = fread(rtc->current_reason, sizeof(char), REASON_TEXT, pidfd);
-		rtc->current_reason[len] = '\0';
+		len = fread(rtc->current_reason + TIME_STAMP_LEN, sizeof(char), REASON_TEXT, pidfd);
+		rtc->current_reason[TIME_STAMP_LEN + len] = '\0';
 	}
 	if (valid_state(state))
 		rtc->current_state = (state_code) state;
@@ -452,11 +447,17 @@ static void wait_state_change(struct runtime_config *rtc)
 #endif
 		rtc->current_state = buf.info.nstate;
 		rtc->message_length = strlen(state_message[rtc->current_state]);
-		memcpy(rtc->current_reason, buf.info.reason, REASON_TEXT);
-		rtc->current_reason[REASON_TEXT - 1] = '\0';
 		gettimeofday(&rtc->previous_change, NULL);
-		if (add_tstamp_to_reason(rtc) == 0)
-			update_pid_file(rtc);
+		if (add_tstamp_to_reason(rtc) != 0)
+			goto error;
+		memccpy((rtc->current_reason + TIME_STAMP_LEN), buf.info.reason, '\0', REASON_TEXT);
+		rtc->current_reason[MAX_MESSAGE - 1] = '\0';
+		update_pid_file(rtc);
+		pthread_rwlock_unlock(&rtc->lock);
+		continue;
+error:
+		warnlog(rtc, "previous state change time cannot be reported");
+		memset(rtc->current_reason, 0, MAX_MESSAGE);
 		pthread_rwlock_unlock(&rtc->lock);
 	}
 }
