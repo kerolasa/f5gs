@@ -1,3 +1,20 @@
+2015-01-18
+	Release v1.1.  Please do not use version 1.0, it's is broken.
+	The so called stable version had severe flaw in how status file
+	treated.  Fact that the file was read at start, and overwrote
+	without re-writing it's contents immediately lead to situation in
+	which the file was empty at stop.  I hoped signal action would
+	have ensured this cannot happen, but init script was killing the
+	daemon with signal KILL so signal handler never ran.  Oh dear, oh
+	dear, the status end up getting lost - assuming one would restart
+	the daemon without changing state.
+
+	The status file problems are now fixed.  Other than that the
+	daemon now uses epoll for maximum performance, handling of
+	buffers is made simple, there is more error checking, and few
+	code clean ups.  With a bit of luck there will not be need for a
+	new release any time soon, but we will see.
+
 2015-01-05
 	Release v1.0.  It is time to declare the software is mature
 	enough to come out of zero series.  With that I also promise to
