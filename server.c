@@ -211,7 +211,7 @@ static void write_reason(struct runtime_config *restrict rtc, int socket)
 			warnlog(rtc, "receive failed");
 		return;
 	}
-	if (!strcmp(io_buf, WHYWHEN)) {
+	if (!memcmp(io_buf, WHYWHEN, sizeof(WHYWHEN))) {
 		struct timeval now, delta;
 
 		if (send(socket, rtc->current_reason, strlen(rtc->current_reason), 0) < 0)
