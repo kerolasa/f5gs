@@ -61,7 +61,7 @@
 static int run_script(const struct runtime_config *restrict rtc, const char *restrict script)
 {
 	pid_t child;
-	int status = 0;
+	int status;
 
 	if (rtc->no_scripts || access(script, X_OK))
 		return 0;
@@ -113,24 +113,24 @@ static int change_state(struct runtime_config *restrict rtc)
 	else
 		buf.info.reason[0] = '\0';
 	if (run_script(rtc, F5GS_PRE) && !rtc->force)
-		return 1;
+		return SCRIPT_PRE_FAILED;
 	if ((rtc->ipc_key = ftok(rtc->pid_file, buf.mtype)) < 0)
 		errx(EXIT_FAILURE, "ftok: is f5gs server process running?");
-	if ((qid = msgget(rtc->ipc_key, 0600)) < 0)
+	if ((qid = msgget(rtc->ipc_key, IPC_MODE)) < 0)
 		errx(EXIT_FAILURE, "msgget failed: server stopped or a version mismatch?");
 	if (msgsnd(qid, (void *)&buf, sizeof(buf.info), 0) != 0)
 		err(EXIT_FAILURE, "ipc message sending failed");
 	if (run_script(rtc, F5GS_POST) && !rtc->force)
-		return 2;
-	return 0;
+		return SCRIPT_POST_FAILED;
+	return SCRIPT_OK;
 }
 
 char *get_server_status(const struct runtime_config *restrict rtc)
 {
 	int sfd;
 	const struct timeval timeout = {
-		.tv_sec = 1,
-		.tv_usec = 0
+		.tv_sec = 1L,
+		.tv_usec = 0L
 	};
 	static char buf[CLIENT_SOCKET_BUF];
 	ssize_t buflen;
@@ -185,11 +185,11 @@ int set_server_status(struct runtime_config *restrict rtc)
 	char *username, *sudo_user;
 
 	switch (change_state(rtc)) {
-	case 0:		/* all ok */
+	case SCRIPT_OK:
 		break;
-	case 1:
+	case SCRIPT_PRE_FAILED:
 		errx(EXIT_FAILURE, "consider running with --no-scripts or --force");
-	case 2:
+	case SCRIPT_POST_FAILED:
 		warnx("it is too late to abort, continueing to the end");
 		break;
 	default:	/* should be impossible */

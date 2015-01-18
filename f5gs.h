@@ -15,6 +15,21 @@ typedef enum {
 	STATE_UNKNOWN		/* must be the last entry */
 } state_code;
 
+/* Identifiers, versions, and so such. */
+enum {
+	STATE_FILE_VERSION = 1,
+	IPC_MSG_ID = 2,
+};
+
+/* Function return values. */
+enum {
+	SCRIPT_OK = 0,
+	SCRIPT_PRE_FAILED,
+	SCRIPT_POST_FAILED
+};
+
+# define IPC_MODE 0600
+
 static const char *state_message[] = {
 	[STATE_ENABLE] = "enable",
 	[STATE_MAINTENANCE] = "maintenance",
@@ -22,22 +37,29 @@ static const char *state_message[] = {
 	[STATE_UNKNOWN] = "unknown"
 };
 
+/* Buffer sizes, string lengths, and such.  */
+enum {
+	TSTAMP_NULL = 1,
+	TSTAMP_NL = 1,
+	TSTAMP_ISO8601 = 19,
+	TSTAMP_USEC = 6,
+	TSTAMP_ZONE = 6,
+	TIME_STAMP_LEN = TSTAMP_NL + TSTAMP_ISO8601 + TSTAMP_USEC + TSTAMP_ZONE,
+	REASON_TEXT = 256,
+	MAX_MESSAGE = TIME_STAMP_LEN + REASON_TEXT,
+
+	CLIENT_SOCKET_BUF = sizeof(state_message) + MAX_MESSAGE,
+
+	TTY_NAME_LEN = 32,
+	NUM_EVENTS = 32,
+	IGNORE_BYTES = 256,
+	STRERRNO_BUF = 256
+};
+
 struct f5gs_action {
 	int fd;
 	int is_socket;
 	struct f5gs_action *p;
-};
-
-enum {
-	STATE_FILE_VERSION = 1,
-	IPC_MSG_ID = 2,
-	TTY_NAME_LEN = 32,
-	TIME_STAMP_LEN = 32, /* \n + timestamp + sp */
-	NUM_EVENTS = 32,
-	IGNORE_BYTES = 256,
-	REASON_TEXT = 256,
-	MAX_MESSAGE = TIME_STAMP_LEN + REASON_TEXT,
-	CLIENT_SOCKET_BUF = sizeof(state_message) + MAX_MESSAGE
 };
 
 struct runtime_config {

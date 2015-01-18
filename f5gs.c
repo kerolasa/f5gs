@@ -239,7 +239,7 @@ int main(const int argc, char **argv)
 	}
 	/* change server state */
 	if (rtc.new_state != STATE_UNKNOWN) {
-		struct timespec waittime = {
+		const struct timespec waittime = {
 			.tv_sec = 0L,
 			.tv_nsec = 1000000L
 		};

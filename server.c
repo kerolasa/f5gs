@@ -79,7 +79,7 @@ volatile sig_atomic_t daemon_running;
 
 static void warnlog(const struct runtime_config *restrict rtc, const char *restrict msg)
 {
-	char buf[256];
+	char buf[STRERRNO_BUF];
 
 	if (rtc->run_foreground && getppid() != 1)
 		warn("%s", msg);
@@ -103,14 +103,15 @@ static void __attribute__((__noreturn__))
 static int make_socket_none_blocking(struct runtime_config *restrict rtc, int socket)
 {
 	int flags;
+
 	if ((flags = fcntl(socket, F_GETFL)) < 0) {
 		warnlog(rtc, "fcntl F_GETFL failed");
-		return -1;
+		return 1;
 	}
 	flags |= O_NONBLOCK;
 	if (fcntl(socket, F_SETFL, flags) < 0) {
 		warnlog(rtc, "fcntl F_SETFL failed");
-		return -1;
+		return 1;
 	}
 	return 0;
 }
@@ -170,15 +171,13 @@ static void accept_connection(struct runtime_config *restrict rtc)
 	event.events = EPOLLIN | EPOLLET;
 	event.data.ptr = socket_action;
 	socket_action->fd = client_socket;
-#ifdef HAVE_TIMERFD_CREATE
-	socket_action->p = timer_action;
-#endif
 	socket_action->is_socket = 1;
 	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, client_socket, &event) < 0) {
 		warnlog(rtc, "epoll_ctl failed");
 		return;
 	}
 #ifdef HAVE_TIMERFD_CREATE
+	socket_action->p = timer_action;
 	event.events = EPOLLIN;
 	event.data.ptr = timer_action;
 	timer_action->fd = tfd;
@@ -206,11 +205,6 @@ static void accept_connection(struct runtime_config *restrict rtc)
 static void write_reason(struct runtime_config *restrict rtc, int socket)
 {
 	char io_buf[IGNORE_BYTES];
-	enum {
-		SECONDS_IN_DAY = 86400,
-		SECONDS_IN_HOUR = 3600,
-		SECONDS_IN_MIN = 60
-	};
 
 	if (recv(socket, io_buf, sizeof(io_buf), 0) < 0) {
 		if (errno != EAGAIN)
@@ -220,15 +214,21 @@ static void write_reason(struct runtime_config *restrict rtc, int socket)
 	if (!strcmp(io_buf, WHYWHEN)) {
 		struct timeval now, delta;
 
-		if (send(socket, rtc->current_reason, strlen(rtc->current_reason), 0) < 0) {
+		if (send(socket, rtc->current_reason, strlen(rtc->current_reason), 0) < 0)
 			warnlog(rtc, "sending reason failed");
-		}
 		gettimeofday(&now, NULL);
 		if (timercmp(&now, &rtc->previous_change, <))
-			/* time went backwards, ignore result */ ;
+			warnlog(rtc, "time went backwards");
 		else {
+			int len;
+			enum {
+				SECONDS_IN_DAY = 86400,
+				SECONDS_IN_HOUR = 3600,
+				SECONDS_IN_MIN = 60
+			};
+
 			timersub(&now, &rtc->previous_change, &delta);
-			int len = sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld ago",
+			len = sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld ago",
 					  delta.tv_sec / SECONDS_IN_DAY,
 					  delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
 					  delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
@@ -243,21 +243,24 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 {
 	struct runtime_config *rtc = voidpt;
 	struct epoll_event *events;
-	int r, i;
 
 #ifdef HAVE_PTHREAD_SETNAME_NP
 	pthread_setname_np(pthread_self(), "handle_requests");
 #endif
 	events = xmalloc(NUM_EVENTS * sizeof(struct epoll_event));
 	while (daemon_running) {
-		r = epoll_wait(rtc->epollfd, events, NUM_EVENTS, -1);
-		if (r < 0) {
+		int nevents, i;
+
+		nevents = epoll_wait(rtc->epollfd, events, NUM_EVENTS, -1);
+		if (nevents < 0) {
 			if (errno == EINTR)
 				continue;
 			warnlog(rtc, "epoll_wait failed");
 			continue;
 		}
-		for (i = 0; i < r; i++) {
+		for (i = 0; i < nevents; i++) {
+			struct f5gs_action *action;
+
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)
 			    || (!(events[i].events & EPOLLIN))) {
 				close(events[i].data.fd);
@@ -267,7 +270,7 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 				accept_connection(rtc);
 				continue;
 			}
-			struct f5gs_action *action = (struct f5gs_action *) events[i].data.ptr;
+			action = (struct f5gs_action *) events[i].data.ptr;
 			if (action->is_socket)
 				write_reason(rtc, action->fd);
 #ifdef HAVE_TIMERFD_CREATE
@@ -307,7 +310,7 @@ static void update_pid_file(const struct runtime_config *restrict rtc)
 
 static int close_pid_file(struct runtime_config *restrict rtc)
 {
-	char buf[256];
+	char buf[STRERRNO_BUF];
 
 	if (close_stream(rtc->pid_filefd)) {
 		if (strerror_r(errno, buf, sizeof(buf)))
@@ -327,7 +330,7 @@ static int add_tstamp_to_reason(struct runtime_config *restrict rtc)
 {
 	time_t prev_c;
 	struct tm prev_tm;
-	char last[7];
+	char zone[TSTAMP_ZONE + TSTAMP_NULL];
 
 	rtc->current_reason[0] = '\n';
 	prev_c = rtc->previous_change.tv_sec;
@@ -335,14 +338,15 @@ static int add_tstamp_to_reason(struct runtime_config *restrict rtc)
 		warnlog(rtc, "localtime_r() failed");
 		return 1;
 	}
-	if (strftime(rtc->current_reason + 1, 20, "%Y-%m-%dT%H:%M:%S", &prev_tm) == 0) {
+	if (strftime(rtc->current_reason + TSTAMP_NL, TSTAMP_ISO8601 + TSTAMP_NULL, "%Y-%m-%dT%H:%M:%S", &prev_tm) == 0) {
 		warnlog(rtc, "strftime failed");
 		return 1;
 	}
-	snprintf(rtc->current_reason + 20, 7, ",%06ld", rtc->previous_change.tv_usec);
-	strftime(last, 7, "%z ", &prev_tm);
+	snprintf(rtc->current_reason + TSTAMP_NL + TSTAMP_ISO8601, TSTAMP_USEC + TSTAMP_NULL, ",%06ld",
+		 rtc->previous_change.tv_usec);
+	strftime(zone, sizeof(zone), "%z ", &prev_tm);
 	/* do not null terminate timestamp */
-	memcpy(rtc->current_reason + 26, last, 6);
+	memcpy(rtc->current_reason + TSTAMP_NL + TSTAMP_ISO8601 + TSTAMP_USEC, zone, TSTAMP_ZONE);
 	return 0;
 }
 
@@ -412,7 +416,7 @@ static void wait_state_change(struct runtime_config *rtc)
 	int msqid;
 	struct state_change_msg buf;
 
-	if ((msqid = msgget(rtc->ipc_key, 0600 | IPC_CREAT)) == -1)
+	if ((msqid = msgget(rtc->ipc_key, IPC_MODE | IPC_CREAT)) == -1)
 		faillog(rtc, "could not create message queue");
 	while (daemon_running) {
 		if (msgrcv(msqid, &buf, sizeof(buf.info), IPC_MSG_ID, MSG_NOERROR) == -1) {
@@ -473,7 +477,7 @@ static void stop_server(struct runtime_config *restrict rtc)
 	pthread_kill(rtc->worker, SIGHUP);
 	pthread_join(rtc->worker, NULL);
 	pthread_rwlock_destroy(&rtc->lock);
-	qid = msgget(rtc->ipc_key, 0600);
+	qid = msgget(rtc->ipc_key, IPC_MODE);
 	msgctl(qid, IPC_RMID, NULL);
 	close(rtc->server_socket);
 	freeaddrinfo(rtc->res);
