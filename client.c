@@ -37,6 +37,7 @@
 #include <err.h>
 #include <errno.h>
 #include <netdb.h>
+#include <netinet/tcp.h>
 #include <paths.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -141,7 +142,7 @@ char *get_server_status(const struct runtime_config *restrict rtc)
 		else
 			err(EXIT_FAILURE, "cannot create socket");
 	}
-	if (setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO, (void *)&timeout, sizeof(timeout)))
+	if (setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO | TCP_NODELAY, (void *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed");
 	if (connect(sfd, rtc->res->ai_addr, rtc->res->ai_addrlen)) {
 		if (rtc->quiet)
