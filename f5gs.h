@@ -1,4 +1,5 @@
 #ifndef F5GS_HEADER_H
+
 # define F5GS_HEADER_H
 
 # define MESSAGE_ERROR		SD_ID128_MAKE(e7,23,7d,b8,48,ae,40,91,b5,ce,09,b2,eb,b7,59,44)
@@ -50,7 +51,6 @@ enum {
 
 	CLIENT_SOCKET_BUF = sizeof(state_message) + MAX_MESSAGE,
 
-	TTY_NAME_LEN = 32,
 	NUM_EVENTS = 32,
 	STATE_CHANGE_VERIFY_TRIES = 64,
 	IGNORE_BYTES = 256,
@@ -88,12 +88,16 @@ struct runtime_config {
 			quiet:1;
 };
 
+# ifndef TTY_NAME_MAX
+#  TTY_NAME_MAX 32
+# endif
+
 struct state_info {
 	state_code nstate;
 	char reason[MAX_MESSAGE];
 	uid_t uid;
 	pid_t pid;
-	char tty[TTY_NAME_LEN];
+	char tty[TTY_NAME_MAX];
 };
 
 struct state_change_msg {

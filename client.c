@@ -104,7 +104,7 @@ static int change_state(struct runtime_config *restrict rtc)
 	buf.info.nstate = rtc->new_state;
 	buf.info.uid = getuid();
 	buf.info.pid = getpid();
-	if (ttyname_r(STDIN_FILENO, buf.info.tty, TTY_NAME_LEN) != 0) {
+	if (ttyname_r(STDIN_FILENO, buf.info.tty, TTY_NAME_MAX) != 0) {
 		if (errno != ENOTTY)
 			warn("ttyname_r failed");
 	}
