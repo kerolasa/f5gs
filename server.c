@@ -540,10 +540,10 @@ static void run_server(struct runtime_config *restrict rtc)
 #else
 	{
 #endif
-		int on = 1;
+		const int on = 1;
 		if (!(rtc->server_socket = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
 			err(EXIT_FAILURE, "cannot create socket");
-		if (setsockopt(rtc->server_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
+		if (setsockopt(rtc->server_socket, SOL_SOCKET, SO_REUSEADDR, (void *)&on, sizeof(on)))
 			err(EXIT_FAILURE, "cannot set socket options");
 		if (bind(rtc->server_socket, rtc->res->ai_addr, rtc->res->ai_addrlen))
 			err(EXIT_FAILURE, "unable to bind");
