@@ -239,26 +239,29 @@ int main(const int argc, char **argv)
 	}
 	/* change server state */
 	if (rtc.new_state != STATE_UNKNOWN) {
-		const struct timespec waittime = {
-			.tv_sec = 0L,
-			.tv_nsec = 1000000L
-		};
-		retval = set_server_status(&rtc);
-		/* sleep a bit before get_server_status(), else sometimes
-		 * server replies using old information */
-		nanosleep(&waittime, NULL);
+		int verify_tries = STATE_CHANGE_VERIFY_TRIES;
+
+		set_server_status(&rtc);
+		retval = EXIT_FAILURE;
+		while (verify_tries--) {
+			const struct timespec waittime = {
+				.tv_sec = 0L,
+				.tv_nsec = 10000000L
+			};
+
+			if (get_quiet_server_status(&rtc) == rtc.new_state) {
+				retval = EXIT_SUCCESS;
+				break;
+			}
+			nanosleep(&waittime, NULL);
+		}
+		if (retval != EXIT_SUCCESS)
+			warnx("state change verification failed");
 	}
 	/* request server state */
-	if (rtc.quiet) {
-		char *s;
-		int i;
-
-		s = get_server_status(&rtc);
-		for (i = 0; i <= STATE_UNKNOWN; i++)
-			if (!strcmp(s, state_message[i]))
-				break;
-		retval = i;
-	} else {
+	if (rtc.quiet)
+		retval = get_quiet_server_status(&rtc);
+	else {
 		if (address)
 			printf("%s: ", address);
 		printf("current status is: %s\n", get_server_status(&rtc));

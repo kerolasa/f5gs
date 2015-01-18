@@ -168,6 +168,18 @@ char *get_server_status(const struct runtime_config *restrict rtc)
 	return buf;
 }
 
+state_code get_quiet_server_status(const struct runtime_config *restrict rtc)
+{
+	char *s;
+	state_code i;
+
+	s = get_server_status(rtc);
+	for (i = STATE_ENABLE; i <= STATE_UNKNOWN; i++)
+		if (!strcmp(s, state_message[i]))
+			break;
+	return i;
+}
+
 static char *getenv_str(const char *restrict name)
 {
 	const char *temp = getenv(name);
@@ -180,7 +192,7 @@ static char *getenv_str(const char *restrict name)
 	return tmpvar;
 }
 
-int set_server_status(struct runtime_config *restrict rtc)
+void set_server_status(struct runtime_config *restrict rtc)
 {
 	char *username, *sudo_user;
 

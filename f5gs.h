@@ -52,6 +52,7 @@ enum {
 
 	TTY_NAME_LEN = 32,
 	NUM_EVENTS = 32,
+	STATE_CHANGE_VERIFY_TRIES = 64,
 	IGNORE_BYTES = 256,
 	STRERRNO_BUF = 256
 };
@@ -102,6 +103,7 @@ struct state_change_msg {
 
 void start_server(struct runtime_config *rtc);
 char *get_server_status(const struct runtime_config *rtc);
-int set_server_status(struct runtime_config *rtc);
+state_code get_quiet_server_status(const struct runtime_config *rtc);
+void set_server_status(struct runtime_config *rtc);
 
 #endif				/* F5GS_HEADER_H */
