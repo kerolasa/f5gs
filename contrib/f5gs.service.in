@@ -1,7 +1,7 @@
 [Unit]
 Description=F5 Graceful Scaling
 Documentation=man:f5gs(8)
-RequiresMountsFor=/var/lib/f5gs
+RequiresMountsFor=@f5gs_rundir@
 After=network.target nss-lookup.target
 
 [Service]
