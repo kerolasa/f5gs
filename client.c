@@ -192,7 +192,25 @@ static char *getenv_str(const char *restrict name)
 	return tmpvar;
 }
 
-void set_server_status(struct runtime_config *restrict rtc)
+int verify_server_status(const struct runtime_config *restrict rtc)
+{
+	int verify_tries = STATE_CHANGE_VERIFY_TRIES;
+
+	while (verify_tries--) {
+		const struct timespec waittime = {
+			.tv_sec = 0L,
+			.tv_nsec = 10000000L
+		};
+
+		if (get_quiet_server_status(rtc) == rtc->new_state)
+			return EXIT_SUCCESS;
+		nanosleep(&waittime, NULL);
+	}
+	warnx("state change verification failed");
+	return EXIT_FAILURE;
+}
+
+int set_server_status(struct runtime_config *restrict rtc)
 {
 	char *username, *sudo_user;
 
@@ -219,5 +237,5 @@ void set_server_status(struct runtime_config *restrict rtc)
 #endif
 	free(username);
 	free(sudo_user);
-	return EXIT_SUCCESS;
+	return verify_server_status(rtc);
 }

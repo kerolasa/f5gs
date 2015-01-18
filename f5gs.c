@@ -238,28 +238,10 @@ int main(const int argc, char **argv)
 		return EXIT_SUCCESS;
 	}
 	/* change server state */
-	if (rtc.new_state != STATE_UNKNOWN) {
-		int verify_tries = STATE_CHANGE_VERIFY_TRIES;
-
-		set_server_status(&rtc);
-		retval = EXIT_FAILURE;
-		while (verify_tries--) {
-			const struct timespec waittime = {
-				.tv_sec = 0L,
-				.tv_nsec = 10000000L
-			};
-
-			if (get_quiet_server_status(&rtc) == rtc.new_state) {
-				retval = EXIT_SUCCESS;
-				break;
-			}
-			nanosleep(&waittime, NULL);
-		}
-		if (retval != EXIT_SUCCESS)
-			warnx("state change verification failed");
-	}
+	if (rtc.new_state != STATE_UNKNOWN)
+		retval = set_server_status(&rtc);
 	/* request server state */
-	if (rtc.quiet)
+	if (rtc.quiet && retval == EXIT_SUCCESS)
 		retval = get_quiet_server_status(&rtc);
 	else {
 		if (address)
