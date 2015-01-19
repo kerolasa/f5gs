@@ -172,13 +172,20 @@ char *get_server_status(const struct runtime_config *restrict rtc)
 state_code get_quiet_server_status(const struct runtime_config *restrict rtc)
 {
 	char *s;
-	state_code i;
 
 	s = get_server_status(rtc);
-	for (i = STATE_ENABLE; i <= STATE_UNKNOWN; i++)
-		if (!strcmp(s, state_message[i]))
-			break;
-	return i;
+	switch (s[0]) {
+	case 'e':
+		return STATE_ENABLE;
+	case 'm':
+		return STATE_MAINTENANCE;
+	case 'd':
+		return STATE_DISABLE;
+	case 'u':
+		return STATE_UNKNOWN;
+	default:
+		errx(EXIT_FAILURE, "unexpected server response: %s", s);
+	}
 }
 
 static char *getenv_str(const char *restrict name)
