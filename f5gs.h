@@ -40,75 +40,79 @@ static const char *state_message[] = {
 
 /* Buffer sizes, string lengths, and such.  */
 enum {
+	/* message size fragments */
 	TSTAMP_NULL = 1,
 	TSTAMP_NL = 1,
 	TSTAMP_ISO8601 = 19,
 	TSTAMP_USEC = 6,
 	TSTAMP_ZONE = 6,
+	/* all time stamp fragments together */
 	TIME_STAMP_LEN = TSTAMP_NL + TSTAMP_ISO8601 + TSTAMP_USEC + TSTAMP_ZONE,
 	REASON_TEXT = 256,
+	/* complete message */
 	MAX_MESSAGE = TIME_STAMP_LEN + REASON_TEXT,
-
+	/* receive buffer size */
 	CLIENT_SOCKET_BUF = sizeof(state_message) + MAX_MESSAGE,
-
-	NUM_EVENTS = 32,
-	STATE_CHANGE_VERIFY_TRIES = 64,
-	IGNORE_BYTES = 256,
-	STRERRNO_BUF = 256
+	/* various */
+	NUM_EVENTS = 32,			/* epoll events */
+	STATE_CHANGE_VERIFY_TRIES = 64,		/* after state change status check */
+	IGNORE_BYTES = 256,			/* amount bytes server will ignore */
+	STRERRNO_BUF = 256			/* strerror_r() message buffer size */
 };
 
-struct f5gs_action {
-	int fd;
-	int is_socket;
-	struct f5gs_action *p;
+struct f5gs_action {				/* structure passed to worker thread */
+	int fd;					/* file descriptor epoll found being active */
+	int is_socket;				/* is the file descriptor socket */
+	struct f5gs_action *p;			/* related timerfd or socket, needed by close() */
 };
 
 struct state_msg {
-	state_code state;
-	size_t len;
-	char reason[MAX_MESSAGE];
+	state_code state;			/* state message code, see earlier enum */
+	size_t len;				/* lenght of the state message */
+	char reason[MAX_MESSAGE];		/* --reason content to --why requests */
 };
 
 struct runtime_config {
-	struct addrinfo *res;
-	int server_socket;
-	int epollfd;
-	pthread_t worker;
-	struct state_msg current[2];
-	const char *state_dir;
-	char *pid_file;
-	FILE *pid_filefd;
-	char **argv;
-	state_code new_state;
-	char *new_reason;
-	struct timeval previous_change;
-	key_t ipc_key;
+	struct addrinfo *res;			/* connection/listen address of --address */
+	int server_socket;			/* listen socket */
+	int epollfd;				/* socket epoll() file descriptor */
+	pthread_t worker;			/* accepted connection request handler */
+	struct state_msg current[2];		/* current and next state message */
+	const char *state_dir;			/* directory where state files are wrote */
+	char *pid_file;				/* path to the state file for this instance */
+	FILE *pid_filefd;			/* open file handle to state file */
+	char **argv;				/* command line arguments */
+	state_code new_state;			/* state the client attemtps to set */
+	char *new_reason;			/* message the client will add to the new state */
+	struct timeval previous_change;		/* timestamp of the previous change */
+	key_t ipc_key;				/* IPC message queue key */
 	unsigned int
-			s:1,
-			why:1,
-			force:1,
-			no_scripts:1,
-			run_foreground:1,
-			quiet:1;
+			s:1,			/* current state_mesg structure in use */
+			why:1,			/* is --why option in use */
+			force:1,		/* is --force option in use */
+			no_scripts:1,		/* is --no-scripts option in use */
+			run_foreground:1,	/* is --foreground option in use */
+			quiet:1;		/* is --quiet option in use */
 };
 
 # ifndef TTY_NAME_MAX
-#  TTY_NAME_MAX 32
+#  TTY_NAME_MAX 32				/* fallback if bits/local_lim.h does not have this */
 # endif
 
-struct state_info {
-	state_code nstate;
-	char reason[MAX_MESSAGE];
-	uid_t uid;
-	pid_t pid;
-	char tty[TTY_NAME_MAX];
+struct state_info {				/* IPC message payload */
+	state_code nstate;			/* state to be set */
+	char reason[MAX_MESSAGE];		/* message accompanied with the state */
+	uid_t uid;				/* uid of the process that set the state */
+	pid_t pid;				/* pid of the process that set the state */
+	char tty[TTY_NAME_MAX];			/* tty of the process that set the state */
 };
 
-struct state_change_msg {
-	long mtype;
-	struct state_info info;
+struct state_change_msg {			/* actual IPC message */
+	long mtype;				/* IPC message type */
+	struct state_info info;			/* IPC message data */
 };
 
+/* functions that are called a cross files  */
 void start_server(struct runtime_config *rtc);
 char *get_server_status(const struct runtime_config *rtc);
 state_code get_quiet_server_status(const struct runtime_config *rtc);
