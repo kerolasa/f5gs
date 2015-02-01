@@ -168,6 +168,7 @@ static void accept_connection(struct runtime_config *restrict rtc)
 		return;
 	}
 #endif
+	memset(&event, 0, sizeof event);
 	event.events = EPOLLIN | EPOLLET;
 	event.data.ptr = socket_action;
 	socket_action->fd = client_socket;
@@ -569,6 +570,7 @@ static void run_server(struct runtime_config *restrict rtc)
 	if ((rtc->epollfd = epoll_create(NUM_EVENTS)) < 0)
 #endif
 		faillog(rtc, "epoll_create failed");
+	memset(&event, 0, sizeof event);
 	event.events = EPOLLIN | EPOLLET;
 	event.data.fd = rtc->server_socket;
 	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, rtc->server_socket, &event) < 0)
