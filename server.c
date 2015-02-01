@@ -148,16 +148,10 @@ static void accept_connection(struct runtime_config *restrict rtc)
 		warnlog(rtc, "accept failed");
 		return;
 	}
-	if (pthread_rwlock_rdlock(&rtc->lock)) {
-		warnlog(rtc, "thread read-lock failed");
-		return;
-	}
-	if (send(client_socket, state_message[rtc->current_state], rtc->message_length, 0) < 0) {
-		pthread_rwlock_unlock(&rtc->lock);
+	if (send(client_socket, state_message[rtc->current[rtc->s].state], rtc->current[rtc->s].len, 0) < 0) {
 		warnlog(rtc, "send failed");
 		return;
 	}
-	pthread_rwlock_unlock(&(rtc->lock));
 	if (make_socket_none_blocking(rtc, client_socket)) {
 		warnlog(rtc, "fcntl none-blocking failed");
 		return;
@@ -215,7 +209,7 @@ static void write_reason(struct runtime_config *restrict rtc, int socket)
 	if (!memcmp(io_buf, WHYWHEN, sizeof(WHYWHEN))) {
 		struct timeval now, delta;
 
-		if (send(socket, rtc->current_reason, strlen(rtc->current_reason), 0) < 0)
+		if (send(socket, rtc->current[rtc->s].reason, strlen(rtc->current[rtc->s].reason), 0) < 0)
 			warnlog(rtc, "sending reason failed");
 		gettimeofday(&now, NULL);
 		if (timercmp(&now, &rtc->previous_change, <))
@@ -296,16 +290,16 @@ static int open_pid_file(struct runtime_config *restrict rtc)
 	return 0;
 }
 
-static void update_pid_file(const struct runtime_config *restrict rtc)
+static void update_pid_file(const struct runtime_config *restrict rtc, const int tmp_s)
 {
 	if (ftruncate(fileno(rtc->pid_filefd), 0)) {
 		warnlog(rtc, "pid_file ftruncate failed");
 		return;
 	}
 	rewind(rtc->pid_filefd);
-	fprintf(rtc->pid_filefd, "%u %d %d\n", getpid(), rtc->current_state, STATE_FILE_VERSION);
+	fprintf(rtc->pid_filefd, "%u %d %d\n", getpid(), rtc->current[tmp_s].state, STATE_FILE_VERSION);
 	fprintf(rtc->pid_filefd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec,
-		rtc->current_reason + TIME_STAMP_LEN);
+		rtc->current[tmp_s].reason + TIME_STAMP_LEN);
 	fflush(rtc->pid_filefd);
 }
 
@@ -327,27 +321,27 @@ static int close_pid_file(struct runtime_config *restrict rtc)
 	return 0;
 }
 
-static int add_tstamp_to_reason(struct runtime_config *restrict rtc)
+static int add_tstamp_to_reason(struct runtime_config *restrict rtc, int tmp_s)
 {
 	time_t prev_c;
 	struct tm prev_tm;
 	char zone[TSTAMP_ZONE + TSTAMP_NULL];
 
-	rtc->current_reason[0] = '\n';
+	rtc->current[tmp_s].reason[0] = '\n';
 	prev_c = rtc->previous_change.tv_sec;
 	if (localtime_r(&prev_c, &prev_tm) == NULL) {
 		warnlog(rtc, "localtime_r() failed");
 		return 1;
 	}
-	if (strftime(rtc->current_reason + TSTAMP_NL, TSTAMP_ISO8601 + TSTAMP_NULL, "%Y-%m-%dT%H:%M:%S", &prev_tm) == 0) {
+	if (strftime(rtc->current[tmp_s].reason + TSTAMP_NL, TSTAMP_ISO8601 + TSTAMP_NULL, "%Y-%m-%dT%H:%M:%S", &prev_tm) == 0) {
 		warnlog(rtc, "strftime failed");
 		return 1;
 	}
-	snprintf(rtc->current_reason + TSTAMP_NL + TSTAMP_ISO8601, TSTAMP_USEC + TSTAMP_NULL, ",%06ld",
+	snprintf(rtc->current[tmp_s].reason + TSTAMP_NL + TSTAMP_ISO8601, TSTAMP_USEC + TSTAMP_NULL, ",%06ld",
 		 rtc->previous_change.tv_usec);
 	strftime(zone, sizeof(zone), "%z ", &prev_tm);
 	/* do not null terminate timestamp */
-	memcpy(rtc->current_reason + TSTAMP_NL + TSTAMP_ISO8601 + TSTAMP_USEC, zone, TSTAMP_ZONE);
+	memcpy(rtc->current[tmp_s].reason + TSTAMP_NL + TSTAMP_ISO8601 + TSTAMP_USEC, zone, TSTAMP_ZONE);
 	return 0;
 }
 
@@ -375,17 +369,17 @@ static void read_status_from_file(struct runtime_config *restrict rtc)
 		if (fscanf(pidfd, "%10ld.%6ld:", &(rtc->previous_change.tv_sec), &(rtc->previous_change.tv_usec)) != 2
 		    || errno != 0)
 			goto err;
-		len = fread(rtc->current_reason + TIME_STAMP_LEN, sizeof(char), REASON_TEXT, pidfd);
-		rtc->current_reason[TIME_STAMP_LEN + len] = '\0';
+		len = fread(rtc->current[rtc->s].reason + TIME_STAMP_LEN, sizeof(char), REASON_TEXT, pidfd);
+		rtc->current[rtc->s].reason[TIME_STAMP_LEN + len] = '\0';
 	}
 	if (valid_state(state))
-		rtc->current_state = (state_code) state;
+		rtc->current[rtc->s].state = (state_code) state;
 	else
  err:
-		rtc->current_state = STATE_UNKNOWN;
+		rtc->current[rtc->s].state = STATE_UNKNOWN;
 	if (pidfd)
 		fclose(pidfd);
-	rtc->message_length = strlen(state_message[rtc->current_state]);
+	rtc->current[rtc->s].len = strlen(state_message[rtc->current[rtc->s].state]);
 }
 
 static void daemonize(void)
@@ -414,7 +408,7 @@ static void daemonize(void)
 
 static void wait_state_change(struct runtime_config *rtc)
 {
-	int msqid;
+	int msqid, tmp_s;
 	struct state_change_msg buf;
 
 	if ((msqid = msgget(rtc->ipc_key, IPC_MODE | IPC_CREAT)) == -1)
@@ -436,34 +430,31 @@ static void wait_state_change(struct runtime_config *rtc)
 #endif
 			continue;
 		}
-		if (pthread_rwlock_wrlock(&rtc->lock)) {
-			warnlog(rtc, "could not get state change lock");
-			continue;
-		}
 #ifdef HAVE_LIBSYSTEMD
-		sd_journal_send("MESSAGE=state change %s -> %s", state_message[rtc->current_state],
+		sd_journal_send("MESSAGE=state change %s -> %s", state_message[rtc->current[rtc->s].state],
 				state_message[buf.info.nstate], "MESSAGE_ID=%s",
 				SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO,
 				"SENDER_UID=%ld", buf.info.uid, "SENDER_PID=%ld", buf.info.pid,
 				"SENDER_TTY=%s", buf.info.tty, NULL);
 #else
 		syslog(LOG_INFO, "state change received from uid %d pid %d tty %s, state %s -> %s", buf.info.uid,
-		       buf.info.pid, buf.info.tty, state_message[rtc->current_state], state_message[buf.info.nstate]);
+		       buf.info.pid, buf.info.tty, state_message[rtc->current[rtc->s].state], state_message[buf.info.nstate]);
 #endif
-		rtc->current_state = buf.info.nstate;
-		rtc->message_length = strlen(state_message[rtc->current_state]);
+		tmp_s = rtc->s ? 0 : 1;
+		rtc->current[tmp_s].state = buf.info.nstate;
+		rtc->current[tmp_s].len = strlen(state_message[buf.info.nstate]);
 		gettimeofday(&rtc->previous_change, NULL);
-		if (add_tstamp_to_reason(rtc) != 0)
+		if (add_tstamp_to_reason(rtc, tmp_s) != 0)
 			goto error;
-		memccpy((rtc->current_reason + TIME_STAMP_LEN), buf.info.reason, '\0', REASON_TEXT);
-		rtc->current_reason[MAX_MESSAGE - 1] = '\0';
-		update_pid_file(rtc);
-		pthread_rwlock_unlock(&rtc->lock);
+		memccpy((rtc->current[tmp_s].reason + TIME_STAMP_LEN), buf.info.reason, '\0', REASON_TEXT);
+		rtc->current[tmp_s].reason[MAX_MESSAGE - 1] = '\0';
+		update_pid_file(rtc, tmp_s);
+		/* flip which structure is in use, this allows lockless reads */
+		rtc->s = tmp_s;
 		continue;
 error:
 		warnlog(rtc, "previous state change time cannot be reported");
-		memset(rtc->current_reason, 0, MAX_MESSAGE);
-		pthread_rwlock_unlock(&rtc->lock);
+		memset(rtc->current[rtc->s].reason, 0, MAX_MESSAGE);
 	}
 }
 
@@ -477,7 +468,6 @@ static void stop_server(struct runtime_config *restrict rtc)
 	daemon_running = 0;
 	pthread_kill(rtc->worker, SIGHUP);
 	pthread_join(rtc->worker, NULL);
-	pthread_rwlock_destroy(&rtc->lock);
 	qid = msgget(rtc->ipc_key, IPC_MODE);
 	msgctl(qid, IPC_RMID, NULL);
 	close(rtc->server_socket);
@@ -485,7 +475,7 @@ static void stop_server(struct runtime_config *restrict rtc)
 	close_pid_file(rtc);
 	if (access(rtc->pid_file, F_OK)) {
 		open_pid_file(rtc);
-		update_pid_file(rtc);
+		update_pid_file(rtc, rtc->s);
 		close_pid_file(rtc);
 	}
 	free(rtc->pid_file);
@@ -556,12 +546,9 @@ static void run_server(struct runtime_config *restrict rtc)
 	if (pthread_attr_init(&attr))
 		err(EXIT_FAILURE, "cannot init thread attribute");
 
-	if (pthread_rwlock_init(&rtc->lock, NULL))
-		err(EXIT_FAILURE, "cannot init read-write lock");
-
 	if (!rtc->run_foreground) {
 		daemonize();
-		update_pid_file(rtc);
+		update_pid_file(rtc, rtc->s);
 	}
 	daemon_running = 1;
 #ifdef HAVE_EPOLL_CREATE1
@@ -578,11 +565,11 @@ static void run_server(struct runtime_config *restrict rtc)
 	create_worker(rtc);
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service started", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START), "STATE=%s",
-			state_message[rtc->current_state], "PRIORITY=%d", LOG_INFO, NULL);
+			state_message[rtc->current[rtc->s].state], "PRIORITY=%d", LOG_INFO, NULL);
 	sd_notify(0, "READY=1");
 #else
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
-	syslog(LOG_INFO, "started in state %s", state_message[rtc->current_state]);
+	syslog(LOG_INFO, "started in state %s", state_message[rtc->current[rtc->s].state]);
 #endif
 	/* clean up after receiving signal */
 	if (sigemptyset(&sigact.sa_mask))
@@ -613,12 +600,12 @@ static void run_server(struct runtime_config *restrict rtc)
 void start_server(struct runtime_config *restrict rtc)
 {
 	gettimeofday(&rtc->previous_change, NULL);
-	memcpy(rtc->current_reason, "<program started>", 18);
+	memcpy(rtc->current[rtc->s].reason, "<program started>", 18);
 	read_status_from_file(rtc);
-	if (add_tstamp_to_reason(rtc))
+	if (add_tstamp_to_reason(rtc, rtc->s))
 		exit(EXIT_FAILURE);
 	open_pid_file(rtc);
-	update_pid_file(rtc);
+	update_pid_file(rtc, rtc->s);
 	if (!(rtc->ipc_key = ftok(rtc->pid_file, IPC_MSG_ID)))
 		err(EXIT_FAILURE, "ftok failed");
 	run_server(rtc);

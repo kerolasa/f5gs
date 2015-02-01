@@ -63,24 +63,28 @@ struct f5gs_action {
 	struct f5gs_action *p;
 };
 
+struct state_msg {
+	state_code state;
+	size_t len;
+	char reason[MAX_MESSAGE];
+};
+
 struct runtime_config {
 	struct addrinfo *res;
 	int server_socket;
 	int epollfd;
 	pthread_t worker;
-	pthread_rwlock_t lock;
-	state_code current_state;
-	size_t message_length;
+	struct state_msg current[2];
 	const char *state_dir;
 	char *pid_file;
 	FILE *pid_filefd;
 	char **argv;
 	state_code new_state;
 	char *new_reason;
-	char current_reason[MAX_MESSAGE];
 	struct timeval previous_change;
 	key_t ipc_key;
 	unsigned int
+			s:1,
 			why:1,
 			force:1,
 			no_scripts:1,
