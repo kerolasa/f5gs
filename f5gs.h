@@ -44,15 +44,15 @@ enum {
 	TSTAMP_NULL = 1,
 	TSTAMP_NL = 1,
 	TSTAMP_ISO8601 = 19,
-	TSTAMP_USEC = 6,
+	TSTAMP_NSEC = 9,
 	TSTAMP_ZONE = 6,
 	/* all time stamp fragments together */
-	TIME_STAMP_LEN = TSTAMP_NL + TSTAMP_ISO8601 + TSTAMP_USEC + TSTAMP_ZONE,
+	TIME_STAMP_LEN = TSTAMP_NL + TSTAMP_ISO8601 + TSTAMP_NSEC + TSTAMP_ZONE,
 	REASON_TEXT = 256,
 	/* complete message */
-	MAX_MESSAGE = TIME_STAMP_LEN + REASON_TEXT,
+	MAX_MESSAGE = TIME_STAMP_LEN + REASON_TEXT + sizeof(state_message),
 	/* receive buffer size */
-	CLIENT_SOCKET_BUF = sizeof(state_message) + MAX_MESSAGE,
+	CLIENT_SOCKET_BUF = MAX_MESSAGE + TIME_STAMP_LEN,
 	/* various */
 	NUM_EVENTS = 32,			/* epoll events */
 	STATE_CHANGE_VERIFY_TRIES = 64,		/* after state change status check */
@@ -84,10 +84,12 @@ struct runtime_config {
 	char **argv;				/* command line arguments */
 	state_code new_state;			/* state the client attemtps to set */
 	char *new_reason;			/* message the client will add to the new state */
-	struct timeval previous_change;		/* timestamp of the previous change */
+	struct timespec previous_change;	/* timestamp of the previous change */
+	struct timespec previous_mono;		/* monotonic timestamp of the previous change */
 	key_t ipc_key;				/* IPC message queue key */
 	unsigned int
 			s:1,			/* current state_mesg structure in use */
+			monotonic:1,		/* clock_gettime() is using monotonic time */
 			why:1,			/* is --why option in use */
 			force:1,		/* is --force option in use */
 			no_scripts:1,		/* is --no-scripts option in use */

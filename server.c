@@ -47,6 +47,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #ifdef HAVE_TIMERFD_CREATE
@@ -76,6 +77,27 @@ static void stop_server(struct runtime_config *restrict rtc);
 
 /* global variables */
 volatile sig_atomic_t daemon_running;
+
+static void gettime_monotonic(struct timespec *ts)
+{
+#ifdef CLOCK_MONOTONIC_RAW
+	clock_gettime(CLOCK_MONOTONIC_RAW, ts);
+#else
+	clock_gettime(CLOCK_MONOTONIC, ts);
+#endif
+}
+
+static void timespec_subtract(const struct timespec *restrict a, const struct timespec *restrict b,
+			      struct timespec *restrict c)
+{
+	if (a->tv_nsec - b->tv_nsec < 0) {
+		c->tv_nsec = a->tv_nsec + 1000000000 - b->tv_nsec;
+		c->tv_sec = a->tv_sec - 1 - b->tv_sec;
+		return;
+	}
+	c->tv_nsec = a->tv_nsec - b->tv_nsec;
+	c->tv_sec = a->tv_sec - b->tv_sec;
+}
 
 static void warnlog(const struct runtime_config *restrict rtc, const char *restrict msg)
 {
@@ -207,30 +229,31 @@ static void write_reason(struct runtime_config *restrict rtc, int socket)
 		return;
 	}
 	if (!memcmp(io_buf, WHYWHEN, sizeof(WHYWHEN))) {
-		struct timeval now, delta;
+		struct timespec now, delta;
+		int len;
+		enum {
+			SECONDS_IN_DAY = 86400,
+			SECONDS_IN_HOUR = 3600,
+			SECONDS_IN_MIN = 60
+		};
 
 		if (send(socket, rtc->current[rtc->s].reason, strlen(rtc->current[rtc->s].reason), 0) < 0)
 			warnlog(rtc, "sending reason failed");
-		gettimeofday(&now, NULL);
-		if (timercmp(&now, &rtc->previous_change, <))
-			warnlog(rtc, "time went backwards");
-		else {
-			int len;
-			enum {
-				SECONDS_IN_DAY = 86400,
-				SECONDS_IN_HOUR = 3600,
-				SECONDS_IN_MIN = 60
-			};
-
-			timersub(&now, &rtc->previous_change, &delta);
-			len = sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld ago",
-					  delta.tv_sec / SECONDS_IN_DAY,
-					  delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
-					  delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
-					  delta.tv_sec % SECONDS_IN_MIN);
-			if (send(socket, io_buf, len, 0) < 0)
-				warnlog(rtc, "send failed");
+		if (rtc->monotonic) {
+			gettime_monotonic(&now);
+			timespec_subtract(&now, &rtc->previous_mono, &delta);
+		} else {
+			clock_gettime(CLOCK_REALTIME, &now);
+			timespec_subtract(&now, &rtc->previous_change, &delta);
 		}
+		len = sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld,%09ld ago",
+				  delta.tv_sec / SECONDS_IN_DAY,
+				  delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
+				  delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
+				  delta.tv_sec % SECONDS_IN_MIN,
+				  delta.tv_nsec);
+		if (send(socket, io_buf, len, 0) < 0)
+			warnlog(rtc, "send failed");
 	}
 }
 
@@ -298,7 +321,7 @@ static void update_pid_file(const struct runtime_config *restrict rtc, const int
 	}
 	rewind(rtc->pid_filefd);
 	fprintf(rtc->pid_filefd, "%u %d %d\n", getpid(), rtc->current[tmp_s].state, STATE_FILE_VERSION);
-	fprintf(rtc->pid_filefd, "%ld.%ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_usec,
+	fprintf(rtc->pid_filefd, "%ld.%09ld:%s", rtc->previous_change.tv_sec, rtc->previous_change.tv_nsec,
 		rtc->current[tmp_s].reason + TIME_STAMP_LEN);
 	fflush(rtc->pid_filefd);
 }
@@ -337,11 +360,11 @@ static int add_tstamp_to_reason(struct runtime_config *restrict rtc, int tmp_s)
 		warnlog(rtc, "strftime failed");
 		return 1;
 	}
-	snprintf(rtc->current[tmp_s].reason + TSTAMP_NL + TSTAMP_ISO8601, TSTAMP_USEC + TSTAMP_NULL, ",%06ld",
-		 rtc->previous_change.tv_usec);
+	snprintf(rtc->current[tmp_s].reason + TSTAMP_NL + TSTAMP_ISO8601, TSTAMP_NSEC + TSTAMP_NULL + TSTAMP_NULL, ",%09ld",
+		 rtc->previous_change.tv_nsec);
 	strftime(zone, sizeof(zone), "%z ", &prev_tm);
 	/* do not null terminate timestamp */
-	memcpy(rtc->current[tmp_s].reason + TSTAMP_NL + TSTAMP_ISO8601 + TSTAMP_USEC, zone, TSTAMP_ZONE);
+	memcpy(rtc->current[tmp_s].reason + TSTAMP_NL + TSTAMP_ISO8601 + TSTAMP_NSEC, zone, TSTAMP_ZONE);
 	return 0;
 }
 
@@ -366,7 +389,7 @@ static void read_status_from_file(struct runtime_config *restrict rtc)
 		goto err;
 	if (0 < version) {
 		size_t len;
-		if (fscanf(pidfd, "%10ld.%6ld:", &(rtc->previous_change.tv_sec), &(rtc->previous_change.tv_usec)) != 2
+		if (fscanf(pidfd, "%10ld.%10ld:", &(rtc->previous_change.tv_sec), &(rtc->previous_change.tv_nsec)) != 2
 		    || errno != 0)
 			goto err;
 		len = fread(rtc->current[rtc->s].reason + TIME_STAMP_LEN, sizeof(char), REASON_TEXT, pidfd);
@@ -443,7 +466,9 @@ static void wait_state_change(struct runtime_config *rtc)
 		tmp_s = rtc->s ? 0 : 1;
 		rtc->current[tmp_s].state = buf.info.nstate;
 		rtc->current[tmp_s].len = strlen(state_message[buf.info.nstate]);
-		gettimeofday(&rtc->previous_change, NULL);
+		clock_gettime(CLOCK_REALTIME, &rtc->previous_change);
+		gettime_monotonic(&rtc->previous_mono);
+		rtc->monotonic = 1;
 		if (add_tstamp_to_reason(rtc, tmp_s) != 0)
 			goto error;
 		memccpy((rtc->current[tmp_s].reason + TIME_STAMP_LEN), buf.info.reason, '\0', REASON_TEXT);
@@ -599,7 +624,7 @@ static void run_server(struct runtime_config *restrict rtc)
 
 void start_server(struct runtime_config *restrict rtc)
 {
-	gettimeofday(&rtc->previous_change, NULL);
+	clock_gettime(CLOCK_REALTIME, &rtc->previous_change);
 	memcpy(rtc->current[rtc->s].reason, "<program started>", 18);
 	read_status_from_file(rtc);
 	if (add_tstamp_to_reason(rtc, rtc->s))
