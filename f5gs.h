@@ -98,7 +98,7 @@ struct runtime_config {
 };
 
 # ifndef TTY_NAME_MAX
-#  TTY_NAME_MAX 32				/* fallback if bits/local_lim.h does not have this */
+#  define TTY_NAME_MAX 32			/* fallback if bits/local_lim.h does not have this */
 # endif
 
 struct state_info {				/* IPC message payload */
