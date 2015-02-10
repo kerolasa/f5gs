@@ -161,7 +161,7 @@ char *get_server_status(const struct runtime_config *restrict rtc)
 		 * and reason to socket */
 		nanosleep(&waittime, NULL);
 	}
-	buflen = recv(sfd, buf, CLIENT_SOCKET_BUF, 0);
+	buflen = recv(sfd, buf, sizeof(buf), 0);
 	if (buflen < 0)
 		err(EXIT_FAILURE, "reading socket failed");
 	else
