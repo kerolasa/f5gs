@@ -292,10 +292,12 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 			if (action->is_socket)
 				write_reason(rtc, action->fd);
 #ifdef HAVE_TIMERFD_CREATE
-			close(action->p->fd);
+			if (close(action->p->fd))
+				warnlog(rtc, "timerfd close");
 			free(action->p);
 #endif
-			close(action->fd);
+			if (close(action->fd))
+				warnlog(rtc, "socket close");
 			free(action);
 		}
 	}
