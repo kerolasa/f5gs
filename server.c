@@ -188,13 +188,15 @@ static void accept_connection(struct runtime_config *restrict rtc)
 	event.events = EPOLLIN | EPOLLET;
 	event.data.ptr = socket_action;
 	socket_action->fd = client_socket;
+#ifdef HAVE_TIMERFD_CREATE
+	socket_action->p = timer_action;
+#endif
 	socket_action->is_socket = 1;
 	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, client_socket, &event) < 0) {
 		warnlog(rtc, "epoll_ctl failed");
 		return;
 	}
 #ifdef HAVE_TIMERFD_CREATE
-	socket_action->p = timer_action;
 	event.events = EPOLLIN;
 	event.data.ptr = timer_action;
 	timer_action->fd = tfd;
