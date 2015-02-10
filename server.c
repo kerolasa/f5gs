@@ -285,11 +285,6 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 		for (i = 0; i < nevents; i++) {
 			struct f5gs_action *action;
 
-			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)
-			    || (!(events[i].events & EPOLLIN))) {
-				close(events[i].data.fd);
-				continue;
-			}
 			if (events[i].data.fd == rtc->server_socket) {
 				accept_connection(rtc);
 				continue;
