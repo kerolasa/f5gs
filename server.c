@@ -254,6 +254,10 @@ static void write_reason(struct runtime_config *restrict rtc, int socket)
 				  delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
 				  delta.tv_sec % SECONDS_IN_MIN,
 				  delta.tv_nsec);
+		if (len < 0) {
+			warnlog(rtc, "reason output truncated");
+			return;
+		}
 		if (send(socket, io_buf, len, 0) < 0)
 			warnlog(rtc, "send failed");
 	}
