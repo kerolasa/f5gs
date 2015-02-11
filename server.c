@@ -185,7 +185,7 @@ static void accept_connection(struct runtime_config *restrict rtc)
 	}
 #endif
 	memset(&event, 0, sizeof event);
-	event.events = EPOLLIN | EPOLLET;
+	event.events = EPOLLIN;
 	event.data.ptr = socket_action;
 	socket_action->fd = client_socket;
 #ifdef HAVE_TIMERFD_CREATE
