@@ -42,7 +42,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/epoll.h>
 #include <sys/msg.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -122,103 +121,21 @@ static void __attribute__((__noreturn__))
 	exit(EXIT_FAILURE);
 }
 
-static int make_socket_none_blocking(struct runtime_config *restrict rtc, int socket)
-{
-	int flags;
-
-	if ((flags = fcntl(socket, F_GETFL)) < 0) {
-		warnlog(rtc, "fcntl F_GETFL failed");
-		return 1;
-	}
-	flags |= O_NONBLOCK;
-	if (fcntl(socket, F_SETFL, flags) < 0) {
-		warnlog(rtc, "fcntl F_SETFL failed");
-		return 1;
-	}
-	return 0;
-}
-
-static void accept_connection(struct runtime_config *restrict rtc)
+static int accept_connection(struct runtime_config *restrict rtc)
 {
 	int client_socket;
 	struct sockaddr_in client_addr;
 	socklen_t addr_len = sizeof client_addr;
-	struct epoll_event event;
-	struct f5gs_action *socket_action = malloc(sizeof(struct f5gs_action));
 
-#ifdef HAVE_TIMERFD_CREATE
-	/* FIXME: on older system that do not have timerfd_create()
-	 * there is no timeout, that makes this software to be easy to
-	 * to DoS.  For example RHEL4 is this sort of system.
-	 * Unfortunately I do not have time right now (2015-01-15)
-	 * correct this issue; getting bug fix release to correct pid
-	 * file handling has greater priority. */
-	int tfd;
-	struct timespec now;
-	struct itimerspec timeout;
-	struct f5gs_action *timer_action = malloc(sizeof(struct f5gs_action));
-#endif
-	if (socket_action == NULL
-#ifdef HAVE_TIMERFD_CREATE
-		|| timer_action == NULL
-#endif
-	) {
-		warnlog(rtc, "could not allocate memory");
-		return;
-	}
 	if ((client_socket = accept(rtc->server_socket, (struct sockaddr *)&client_addr, &addr_len)) < 0) {
 		warnlog(rtc, "accept failed");
-		return;
+		return -1;
 	}
 	if (send(client_socket, state_message[rtc->current[rtc->s].state], rtc->current[rtc->s].len, 0) < 0) {
 		warnlog(rtc, "send failed");
-		return;
+		return -1;
 	}
-	if (make_socket_none_blocking(rtc, client_socket)) {
-		warnlog(rtc, "fcntl none-blocking failed");
-		return;
-	}
-#ifdef HAVE_TIMERFD_CREATE
-	if ((tfd = timerfd_create(CLOCK_REALTIME, 0)) < 0) {
-		warnlog(rtc, "timerfd_create failed");
-		return;
-	}
-#endif
-	memset(&event, 0, sizeof event);
-	event.events = EPOLLIN;
-	event.data.ptr = socket_action;
-	socket_action->fd = client_socket;
-#ifdef HAVE_TIMERFD_CREATE
-	socket_action->p = timer_action;
-#endif
-	socket_action->is_socket = 1;
-	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, client_socket, &event) < 0) {
-		warnlog(rtc, "epoll_ctl failed");
-		return;
-	}
-#ifdef HAVE_TIMERFD_CREATE
-	event.events = EPOLLIN;
-	event.data.ptr = timer_action;
-	timer_action->fd = tfd;
-	timer_action->p = socket_action;
-	timer_action->is_socket = 0;
-	if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
-		warnlog(rtc, "clock_gettime failed");
-		return;
-	}
-	timeout.it_interval.tv_sec = 0;
-	timeout.it_interval.tv_nsec = 0;
-	timeout.it_value.tv_sec = now.tv_sec + 1;
-	timeout.it_value.tv_nsec = now.tv_nsec;
-	if (timerfd_settime(tfd, TFD_TIMER_ABSTIME, &timeout, NULL) < 0) {
-		warnlog(rtc, "timerfd_settime failed");
-		return;
-	}
-	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, tfd, &event) < 0) {
-		warnlog(rtc, "epoll_ctl timeout failed");
-		return;
-	}
-#endif
+	return client_socket;
 }
 
 static void write_reason(struct runtime_config *restrict rtc, int socket)
@@ -263,52 +180,54 @@ static void write_reason(struct runtime_config *restrict rtc, int socket)
 	}
 }
 
+static void __attribute__((__noreturn__)) *serve_one_request(void *voidpt)
+{
+	struct socket_pass *sp = voidpt;
+	const struct timeval timeout = {
+		.tv_sec = 1,
+		.tv_usec = 0
+	};
+	enum {
+		SECONDS_IN_DAY = 86400,
+		SECONDS_IN_HOUR = 3600,
+		SECONDS_IN_MIN = 60
+	};
+
+	pthread_detach(pthread_self());
+	/* wait a second if client wants more info */
+	if (setsockopt(sp->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout))) {
+		warnlog(sp->rtc, "setsockopt failed");
+		goto alldone;
+	}
+	write_reason(sp->rtc, sp->socket);
+ alldone:
+	close(sp->socket);
+	free(sp);
+	pthread_exit(NULL);
+}
+
 static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 {
 	struct runtime_config *rtc = voidpt;
-	struct epoll_event *events;
 
 #ifdef HAVE_PTHREAD_SETNAME_NP
 	pthread_setname_np(pthread_self(), "handle_requests");
 #endif
-	events = xmalloc(NUM_EVENTS * sizeof(struct epoll_event));
 	while (daemon_running) {
-		int nevents, i;
+		pthread_t thread;
+		struct socket_pass *sp;
 
-		nevents = epoll_wait(rtc->epollfd, events, NUM_EVENTS, -1);
-		if (nevents < 0) {
-			if (errno == EINTR)
+		sp =  xmalloc(sizeof(struct socket_pass));
+		sp->rtc = rtc;
+		if ((sp->socket = accept_connection(rtc)) < 0) {
+			free(sp);
+			if (errno == EINTR || errno == ECONNABORTED)
 				continue;
-			warnlog(rtc, "epoll_wait failed");
-			continue;
+			faillog(rtc, "could not accept connection");
 		}
-		for (i = 0; i < nevents; i++) {
-			struct f5gs_action *action;
-			struct epoll_event event;
-
-			if (events[i].data.fd == rtc->server_socket) {
-				accept_connection(rtc);
-				continue;
-			}
-			action = (struct f5gs_action *) events[i].data.ptr;
-			if (action->is_socket)
-				write_reason(rtc, action->fd);
-			memset(&event, 0, sizeof event);
-#ifdef HAVE_TIMERFD_CREATE
-			if (epoll_ctl(rtc->epollfd, EPOLL_CTL_DEL, action->p->fd, &event))
-				warnlog(rtc, "removing timerfd epoll");
-			if (close(action->p->fd))
-				warnlog(rtc, "timerfd close");
-			free(action->p);
-#endif
-			if (epoll_ctl(rtc->epollfd, EPOLL_CTL_DEL, action->fd, &event))
-				warnlog(rtc, "removing socket epoll");
-			if (close(action->fd))
-				warnlog(rtc, "socket close");
-			free(action);
-		}
+		if (pthread_create(&thread, NULL, serve_one_request, sp))
+			warnlog(sp->rtc, "could not create handle_request thread");
 	}
-	free(events);
 	pthread_exit(NULL);
 }
 
@@ -547,7 +466,6 @@ static void setup_sigaction(struct runtime_config *restrict rtc, int sig, struct
 
 static void run_server(struct runtime_config *restrict rtc)
 {
-	struct epoll_event event;
 	pthread_attr_t attr;
 	struct sigaction sigact = {
 		.sa_handler = catch_stop,
@@ -572,8 +490,6 @@ static void run_server(struct runtime_config *restrict rtc)
 			err(EXIT_FAILURE, "cannot set socket options");
 		if (bind(rtc->server_socket, rtc->res->ai_addr, rtc->res->ai_addrlen))
 			err(EXIT_FAILURE, "unable to bind");
-		if (make_socket_none_blocking(rtc, rtc->server_socket))
-			err(EXIT_FAILURE, "cannot set server socket none-blocking");
 		if (listen(rtc->server_socket, SOMAXCONN))
 			err(EXIT_FAILURE, "unable to listen");
 	}
@@ -585,17 +501,6 @@ static void run_server(struct runtime_config *restrict rtc)
 		update_pid_file(rtc, rtc->s);
 	}
 	daemon_running = 1;
-#ifdef HAVE_EPOLL_CREATE1
-	if ((rtc->epollfd = epoll_create1(0)) < 0)
-#else
-	if ((rtc->epollfd = epoll_create(NUM_EVENTS)) < 0)
-#endif
-		faillog(rtc, "epoll_create failed");
-	memset(&event, 0, sizeof event);
-	event.events = EPOLLIN | EPOLLET;
-	event.data.fd = rtc->server_socket;
-	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, rtc->server_socket, &event) < 0)
-		faillog(rtc, "epoll_ctl add socket failed");
 	create_worker(rtc);
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service started", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START), "STATE=%s",

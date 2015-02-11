@@ -60,10 +60,9 @@ enum {
 	STRERRNO_BUF = 256			/* strerror_r() message buffer size */
 };
 
-struct f5gs_action {				/* structure passed to worker thread */
-	int fd;					/* file descriptor epoll found being active */
-	int is_socket;				/* is the file descriptor socket */
-	struct f5gs_action *p;			/* related timerfd or socket, needed by close() */
+struct socket_pass {
+	struct runtime_config *rtc;		/* run time configuration for socket handler thread */
+	int socket;				/* request socket */
 };
 
 struct state_msg {
