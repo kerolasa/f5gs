@@ -284,6 +284,7 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 		}
 		for (i = 0; i < nevents; i++) {
 			struct f5gs_action *action;
+			struct epoll_event event;
 
 			if (events[i].data.fd == rtc->server_socket) {
 				accept_connection(rtc);
@@ -292,11 +293,16 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 			action = (struct f5gs_action *) events[i].data.ptr;
 			if (action->is_socket)
 				write_reason(rtc, action->fd);
+			memset(&event, 0, sizeof event);
 #ifdef HAVE_TIMERFD_CREATE
+			if (epoll_ctl(rtc->epollfd, EPOLL_CTL_DEL, action->p->fd, &event))
+				warnlog(rtc, "removing timerfd epoll");
 			if (close(action->p->fd))
 				warnlog(rtc, "timerfd close");
 			free(action->p);
 #endif
+			if (epoll_ctl(rtc->epollfd, EPOLL_CTL_DEL, action->fd, &event))
+				warnlog(rtc, "removing socket epoll");
 			if (close(action->fd))
 				warnlog(rtc, "socket close");
 			free(action);
