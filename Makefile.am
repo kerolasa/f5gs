@@ -74,7 +74,7 @@ f5gs.socket: contrib/f5gs.socket.in
 	@ rm -f $@ $@.tmp
 	$(AM_V_GEN) srcdir=''; \
 		test -f ./contrib/f5gs.socket.in || srcdir=$(srcdir)/; \
-		$(edit) $${srcdir}contrib/f5gs.service.in >$@.tmp
+		$(edit) $${srcdir}contrib/f5gs.socket.in >$@.tmp
 	@ mv $@.tmp $@
 systemdsystemunit_DATA = f5gs.service f5gs.socket
 CLEANFILES += f5gs.service f5gs.socket
