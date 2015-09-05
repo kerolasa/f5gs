@@ -472,13 +472,14 @@ static void run_server(struct runtime_config *restrict rtc)
 		.sa_flags = 0
 	};
 #ifdef HAVE_LIBSYSTEMD
-	int ret;
+	const int ret = sd_listen_fds(0);
 
-	ret = sd_listen_fds(0);
-	if (1 < ret)
-		faillog(rtc, "no or too many file descriptors received");
-	else if (ret == 1)
+	if (ret == 1)
 		rtc->server_socket = SD_LISTEN_FDS_START + 0;
+	else if (ret < 0)
+		faillog(rtc, "sd_listen_fds() failed");
+	else if (1 < ret)
+		faillog(rtc, "too many file descriptors received");
 	else {
 #else
 	{
