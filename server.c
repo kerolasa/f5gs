@@ -258,7 +258,7 @@ static int close_pid_file(struct runtime_config *restrict rtc)
 {
 	char buf[STRERRNO_BUF];
 
-	if (close_stream(rtc->pid_filefd)) {
+	if (rtc->pid_filefd && close_stream(rtc->pid_filefd)) {
 		if (strerror_r(errno, buf, sizeof(buf)))
 #ifdef HAVE_LIBSYSTEMD
 			sd_journal_send("MESSAGE=closing %s failed", rtc->pid_file, "MESSAGE_ID=%s",
@@ -413,20 +413,26 @@ error:
 
 static void stop_server(struct runtime_config *restrict rtc)
 {
-	int qid;
-
 #ifdef HAVE_LIBSYSTEMD
 	sd_notify(0, "STOPPING=1");
 #endif
 	daemon_running = 0;
-	pthread_kill(rtc->worker, SIGHUP);
-	pthread_join(rtc->worker, NULL);
-	qid = msgget(rtc->ipc_key, IPC_MODE);
-	msgctl(qid, IPC_RMID, NULL);
-	close(rtc->server_socket);
-	freeaddrinfo(rtc->res);
+	if (rtc->worker) {
+		pthread_kill(rtc->worker, SIGHUP);
+		pthread_join(rtc->worker, NULL);
+	}
+	if (rtc->ipc_key) {
+		int qid;
+
+		qid = msgget(rtc->ipc_key, IPC_MODE);
+		msgctl(qid, IPC_RMID, NULL);
+	}
+	if (rtc->server_socket)
+		close(rtc->server_socket);
+	if (rtc->res)
+		freeaddrinfo(rtc->res);
 	close_pid_file(rtc);
-	if (access(rtc->pid_file, F_OK)) {
+	if (rtc->pid_file && access(rtc->pid_file, F_OK)) {
 		open_pid_file(rtc);
 		update_pid_file(rtc, rtc->s);
 		close_pid_file(rtc);
