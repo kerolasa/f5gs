@@ -234,7 +234,7 @@ int set_server_status(struct runtime_config *restrict rtc)
 	case SCRIPT_POST_FAILED:
 		warnx("it is too late to abort, continueing to the end");
 		break;
-	default:	/* should be impossible */
+	default:		/* should be impossible */
 		abort();
 	}
 	username = getenv_str("USER");

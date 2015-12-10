@@ -106,8 +106,8 @@ static void warnlog(const struct runtime_config *restrict rtc, const char *restr
 		warn("%s", msg);
 	if (strerror_r(errno, buf, sizeof(buf)))
 #ifdef HAVE_LIBSYSTEMD
-		sd_journal_send("MESSAGE=%s", msg, "STRERROR=%s", buf, "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR),
-				"PRIORITY=%d", LOG_ERR, NULL);
+		sd_journal_send("MESSAGE=%s", msg, "STRERROR=%s", buf, "MESSAGE_ID=%s",
+				SD_ID128_CONST_STR(MESSAGE_ERROR), "PRIORITY=%d", LOG_ERR, NULL);
 #else
 		syslog(LOG_ERR, "%s: %s", msg, buf);
 #endif
@@ -166,11 +166,10 @@ static void write_reason(struct runtime_config *restrict rtc, int socket)
 			timespec_subtract(&now, &rtc->previous_change, &delta);
 		}
 		len = sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld,%09ld ago",
-				  delta.tv_sec / SECONDS_IN_DAY,
-				  delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
-				  delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
-				  delta.tv_sec % SECONDS_IN_MIN,
-				  delta.tv_nsec);
+			      delta.tv_sec / SECONDS_IN_DAY,
+			      delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
+			      delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
+			      delta.tv_sec % SECONDS_IN_MIN, delta.tv_nsec);
 		if (len < 0) {
 			warnlog(rtc, "reason output truncated");
 			return;
@@ -217,7 +216,7 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 		pthread_t thread;
 		struct socket_pass *sp;
 
-		sp =  xmalloc(sizeof(struct socket_pass));
+		sp = xmalloc(sizeof(struct socket_pass));
 		sp->rtc = rtc;
 		if ((sp->socket = accept_connection(rtc)) < 0) {
 			free(sp);
@@ -284,12 +283,14 @@ static int add_tstamp_to_reason(struct runtime_config *restrict rtc, int tmp_s)
 		warnlog(rtc, "localtime_r() failed");
 		return 1;
 	}
-	if (strftime(rtc->current[tmp_s].reason + TSTAMP_NL, TSTAMP_ISO8601 + TSTAMP_NULL, "%Y-%m-%dT%H:%M:%S", &prev_tm) == 0) {
+	if (strftime
+	    (rtc->current[tmp_s].reason + TSTAMP_NL, TSTAMP_ISO8601 + TSTAMP_NULL, "%Y-%m-%dT%H:%M:%S",
+	     &prev_tm) == 0) {
 		warnlog(rtc, "strftime failed");
 		return 1;
 	}
-	snprintf(rtc->current[tmp_s].reason + TSTAMP_NL + TSTAMP_ISO8601, TSTAMP_NSEC + TSTAMP_NULL + TSTAMP_NULL, ",%09ld",
-		 rtc->previous_change.tv_nsec);
+	snprintf(rtc->current[tmp_s].reason + TSTAMP_NL + TSTAMP_ISO8601, TSTAMP_NSEC + TSTAMP_NULL + TSTAMP_NULL,
+		 ",%09ld", rtc->previous_change.tv_nsec);
 	strftime(zone, sizeof(zone), "%z ", &prev_tm);
 	/* do not null terminate timestamp */
 	memcpy(rtc->current[tmp_s].reason + TSTAMP_NL + TSTAMP_ISO8601 + TSTAMP_NSEC, zone, TSTAMP_ZONE);
@@ -389,7 +390,8 @@ static void wait_state_change(struct runtime_config *rtc)
 				"SENDER_TTY=%s", buf.info.tty, NULL);
 #else
 		syslog(LOG_INFO, "state change received from uid %d pid %d tty %s, state %s -> %s", buf.info.uid,
-		       buf.info.pid, buf.info.tty, state_message[rtc->current[rtc->s].state], state_message[buf.info.nstate]);
+		       buf.info.pid, buf.info.tty, state_message[rtc->current[rtc->s].state],
+		       state_message[buf.info.nstate]);
 #endif
 		tmp_s = rtc->s ? 0 : 1;
 		rtc->current[tmp_s].state = buf.info.nstate;
@@ -405,7 +407,7 @@ static void wait_state_change(struct runtime_config *rtc)
 		/* flip which structure is in use, this allows lockless reads */
 		rtc->s = tmp_s;
 		continue;
-error:
+ error:
 		warnlog(rtc, "previous state change time cannot be reported");
 		memset(rtc->current[rtc->s].reason, 0, MAX_MESSAGE);
 	}
@@ -521,22 +523,22 @@ static void run_server(struct runtime_config *restrict rtc)
 	if (sigemptyset(&sigact.sa_mask))
 		faillog(rtc, "sigemptyset failed");
 #ifdef SIGHUP
-	setup_sigaction(rtc, SIGHUP,  &sigact);
+	setup_sigaction(rtc, SIGHUP, &sigact);
 #endif
 #ifdef SIGINT
-	setup_sigaction(rtc, SIGINT,  &sigact);
+	setup_sigaction(rtc, SIGINT, &sigact);
 #endif
 #ifdef SIGQUIT
-	setup_sigaction(rtc, SIGQUIT,  &sigact);
+	setup_sigaction(rtc, SIGQUIT, &sigact);
 #endif
 #ifdef SIGTERM
-	setup_sigaction(rtc, SIGTERM,  &sigact);
+	setup_sigaction(rtc, SIGTERM, &sigact);
 #endif
 #ifdef SIGUSR1
-	setup_sigaction(rtc, SIGUSR1,  &sigact);
+	setup_sigaction(rtc, SIGUSR1, &sigact);
 #endif
 #ifdef SIGUSR2
-	setup_sigaction(rtc, SIGUSR2,  &sigact);
+	setup_sigaction(rtc, SIGUSR2, &sigact);
 #endif
 	while (daemon_running)
 		wait_state_change(rtc);
