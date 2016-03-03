@@ -140,6 +140,8 @@ f5gs \-\-server
 .br
 f5gs \-\-enable
 .br
+F5GS="additional instruction" f5gs \-\-enable
+.br
 f5gs
 .br
 f5gs \-\-quiet; echo $?
@@ -191,17 +193,18 @@ the executable is ignored.  For the rest see pre script above.
 .B @f5gs_rundir@
 Location of the status files.
 .SH ENVIRONMENT
-The
-.B f5gs
-will hardcode PATH to have _PATH_STDPATH value from
-.B paths.h
-header file, that usually has value
-.I /usr/bin:\:/bin:\:/usr/sbin:\:/sbin
-All other environment variables are cleared before running
+When
+.B F5GS
+is set it is forwarded as-is to
 .I pre
 and
 .I post
 executables.
+.B PATH
+is hardcoded to have _PATH_STDPATH value from paths.h header file, that
+usually has value
+.I /usr/bin:\:/bin:\:/usr/sbin:\:/sbin
+All other environment variables are cleared.
 .SH AUTHORS
 .MT @PACKAGE_BUGREPORT@
 @PACKAGE_MAINTAINER@

@@ -70,8 +70,13 @@ static int run_script(const struct runtime_config *restrict rtc, const char *res
 	if (child < 0)
 		err(EXIT_FAILURE, "cannot fork %s", script);
 	if (child == 0) {
+		char *p, *copy = NULL;
+
 		if (setuid(geteuid()))
 			err(EXIT_FAILURE, "setuid() failed");
+		p = getenv("F5GS");
+		if (p)
+			copy = xstrdup(p);
 #ifdef HAVE_CLEARENV
 		clearenv();
 #else
@@ -79,6 +84,11 @@ static int run_script(const struct runtime_config *restrict rtc, const char *res
 #endif
 		if (setenv("PATH", _PATH_STDPATH, 1) < 0)
 			err(EXIT_FAILURE, "cannot setenv");
+		if (copy) {
+			if( setenv("F5GS", copy, 1) < 0)
+				err(EXIT_FAILURE, "cannot setenv");
+			free(copy);
+		}
 		exit(execv(script, rtc->argv));
 	}
 	while (child) {
