@@ -235,7 +235,7 @@ static int open_pid_file(struct runtime_config *restrict rtc)
 	if (access(rtc->state_dir, F_OK))
 		if (mkdir(rtc->state_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH))
 			err(EXIT_FAILURE, "cannot create directory: %s", rtc->state_dir);
-	if (!(rtc->pid_filefd = fopen(rtc->pid_file, "w")))
+	if (!(rtc->pid_filefd = fopen(rtc->pid_file, "we")))
 		err(EXIT_FAILURE, "cannot not open file: %s", rtc->pid_file);
 	return 0;
 }
