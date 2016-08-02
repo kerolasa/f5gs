@@ -336,8 +336,6 @@ static void read_status_from_file(struct runtime_config *restrict rtc)
 
 static void daemonize(void)
 {
-	int fd;
-
 	switch (fork()) {
 	case -1:
 		err(EXIT_FAILURE, "cannot fork");
@@ -348,14 +346,8 @@ static void daemonize(void)
 	}
 	if (!setsid())
 		err(EXIT_FAILURE, "cannot setsid");
-	if (chdir("/"))
-		err(EXIT_FAILURE, "cannot chdir to root");
-	if ((fd = open("/dev/null", O_RDWR, 0)) < 0)
-		err(EXIT_FAILURE, "cannot open /dev/null");
-	dup2(fd, STDIN_FILENO);
-	dup2(fd, STDOUT_FILENO);
-	dup2(fd, STDERR_FILENO);
-	close(fd);
+	if (daemon(0, 0))
+		err(EXIT_FAILURE, "daemon");
 }
 
 static void wait_state_change(struct runtime_config *rtc)
