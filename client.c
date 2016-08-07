@@ -85,7 +85,7 @@ static int run_script(const struct runtime_config *restrict rtc, const char *res
 		if (setenv("PATH", _PATH_STDPATH, 1) < 0)
 			err(EXIT_FAILURE, "cannot setenv");
 		if (copy) {
-			if( setenv("F5GS", copy, 1) < 0)
+			if (setenv("F5GS", copy, 1) < 0)
 				err(EXIT_FAILURE, "cannot setenv");
 			free(copy);
 		}
