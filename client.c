@@ -235,6 +235,7 @@ int verify_server_status(const struct runtime_config *restrict rtc)
 int set_server_status(struct runtime_config *restrict rtc)
 {
 	char *username, *sudo_user;
+	int retval = EXIT_SUCCESS;
 
 	switch (change_state(rtc)) {
 	case SCRIPT_OK:
@@ -243,6 +244,7 @@ int set_server_status(struct runtime_config *restrict rtc)
 		errx(EXIT_FAILURE, "consider running with --no-scripts or --force");
 	case SCRIPT_POST_FAILED:
 		warnx("post script failed");
+		retval = EXIT_FAILURE;
 		break;
 	default:		/* should be impossible */
 		abort();
@@ -259,5 +261,6 @@ int set_server_status(struct runtime_config *restrict rtc)
 #endif
 	free(username);
 	free(sudo_user);
-	return verify_server_status(rtc);
+	retval |= verify_server_status(rtc);
+	return retval;
 }
