@@ -67,7 +67,7 @@ struct socket_pass {
 
 struct state_msg {
 	state_code state;			/* state message code, see earlier enum */
-	size_t len;				/* lenght of the state message */
+	size_t len;				/* length of the state message */
 	char reason[MAX_MESSAGE];		/* --reason content to --why requests */
 };
 

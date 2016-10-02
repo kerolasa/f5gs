@@ -242,7 +242,7 @@ int set_server_status(struct runtime_config *restrict rtc)
 	case SCRIPT_PRE_FAILED:
 		errx(EXIT_FAILURE, "consider running with --no-scripts or --force");
 	case SCRIPT_POST_FAILED:
-		warnx("it is too late to abort, continueing to the end");
+		warnx("post script failed");
 		break;
 	default:		/* should be impossible */
 		abort();
