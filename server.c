@@ -37,12 +37,12 @@
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <mqueue.h>
 #include <netdb.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/msg.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/wait.h>
@@ -352,48 +352,48 @@ static void daemonize(void)
 
 static void wait_state_change(struct runtime_config *rtc)
 {
-	int msqid, tmp_s;
-	struct state_change_msg buf;
+	int tmp_s;
+	struct state_info buf;
+	char *msg = (char *)&buf;
+	struct mq_attr attr = {.mq_maxmsg = 5,.mq_msgsize = sizeof(buf) };
 
-	if ((msqid = msgget(rtc->ipc_key, IPC_MODE | IPC_CREAT)) == -1)
+	if ((rtc->mq = mq_open(rtc->mq_name, O_CREAT | O_RDONLY, 0600, &attr)) == (mqd_t) - 1)
 		faillog(rtc, "could not create message queue");
 	while (daemon_running) {
-		if (msgrcv(msqid, &buf, sizeof(buf.info), IPC_MSG_ID, MSG_NOERROR) == -1) {
+		if (mq_receive(rtc->mq, msg, sizeof(buf), NULL) < 0) {
 			if (errno == EINTR)
 				continue;
 			warnlog(rtc, "receiving ipc message failed");
 			continue;
 		}
-		if (!valid_state(buf.info.nstate)) {
+		if (!valid_state(buf.nstate)) {
 #ifdef HAVE_LIBSYSTEMD
-			sd_journal_send("MESSAGE=unknown state change: %d", buf.info.nstate,
+			sd_journal_send("MESSAGE=unknown state change: %d", buf.nstate,
 					"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR), "PRIORITY=%d", LOG_ERR,
 					NULL);
 #else
-			syslog(LOG_INFO, "unknown state change: %d", buf.info.nstate);
+			syslog(LOG_INFO, "unknown state change: %d", buf.nstate);
 #endif
 			continue;
 		}
 #ifdef HAVE_LIBSYSTEMD
 		sd_journal_send("MESSAGE=state change %s -> %s", state_message[rtc->current[rtc->s].state],
-				state_message[buf.info.nstate], "MESSAGE_ID=%s",
+				state_message[buf.nstate], "MESSAGE_ID=%s",
 				SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO,
-				"SENDER_UID=%ld", buf.info.uid, "SENDER_PID=%ld", buf.info.pid,
-				"SENDER_TTY=%s", buf.info.tty, NULL);
+				"SENDER_UID=%ld", buf.uid, "SENDER_PID=%ld", buf.pid, "SENDER_TTY=%s", buf.tty, NULL);
 #else
-		syslog(LOG_INFO, "state change received from uid %d pid %d tty %s, state %s -> %s", buf.info.uid,
-		       buf.info.pid, buf.info.tty, state_message[rtc->current[rtc->s].state],
-		       state_message[buf.info.nstate]);
+		syslog(LOG_INFO, "state change received from uid %d pid %d tty %s, state %s -> %s", buf.uid,
+		       buf.pid, buf.tty, state_message[rtc->current[rtc->s].state], state_message[buf.nstate]);
 #endif
 		tmp_s = rtc->s ? 0 : 1;
-		rtc->current[tmp_s].state = buf.info.nstate;
-		rtc->current[tmp_s].len = strlen(state_message[buf.info.nstate]);
+		rtc->current[tmp_s].state = buf.nstate;
+		rtc->current[tmp_s].len = strlen(state_message[buf.nstate]);
 		clock_gettime(CLOCK_REALTIME, &rtc->previous_change);
 		gettime_monotonic(&rtc->previous_mono);
 		rtc->monotonic = 1;
 		if (add_tstamp_to_reason(rtc, tmp_s) != 0)
 			goto error;
-		memccpy((rtc->current[tmp_s].reason + TIME_STAMP_LEN), buf.info.reason, '\0', REASON_TEXT);
+		memccpy((rtc->current[tmp_s].reason + TIME_STAMP_LEN), buf.reason, '\0', REASON_TEXT);
 		rtc->current[tmp_s].reason[MAX_MESSAGE - 1] = '\0';
 		update_pid_file(rtc, tmp_s);
 		/* flip which structure is in use, this allows lockless reads */
@@ -415,11 +415,9 @@ static void stop_server(struct runtime_config *restrict rtc)
 		pthread_kill(rtc->worker, SIGHUP);
 		pthread_join(rtc->worker, NULL);
 	}
-	if (rtc->ipc_key) {
-		int qid;
-
-		qid = msgget(rtc->ipc_key, IPC_MODE);
-		msgctl(qid, IPC_RMID, NULL);
+	if (rtc->mq) {
+		mq_close(rtc->mq);
+		mq_unlink(rtc->mq_name);
 	}
 	if (rtc->server_socket)
 		close(rtc->server_socket);
@@ -432,6 +430,7 @@ static void stop_server(struct runtime_config *restrict rtc)
 		close_pid_file(rtc);
 	}
 	free(rtc->pid_file);
+	free(rtc->mq_name);
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service stopped", "MESSAGE_ID=%s",
 			SD_ID128_CONST_STR(MESSAGE_STOP_START), "PRIORITY=%d", LOG_INFO, NULL);
@@ -546,7 +545,5 @@ void start_server(struct runtime_config *restrict rtc)
 		exit(EXIT_FAILURE);
 	open_pid_file(rtc);
 	update_pid_file(rtc, rtc->s);
-	if (!(rtc->ipc_key = ftok(rtc->pid_file, IPC_MSG_ID)))
-		err(EXIT_FAILURE, "ftok failed");
 	run_server(rtc);
 }

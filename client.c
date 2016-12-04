@@ -36,6 +36,7 @@
 
 #include <err.h>
 #include <errno.h>
+#include <mqueue.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <paths.h>
@@ -107,15 +108,14 @@ static int run_script(const struct runtime_config *restrict rtc, const char *res
 
 static int change_state(struct runtime_config *restrict rtc)
 {
-	struct state_change_msg buf = {
-		.mtype = IPC_MSG_ID,
-	};
-	int qid;
+	struct state_info buf = { 0 };
+	const char *msg = (const char *)&buf;
 
-	buf.info.nstate = rtc->new_state;
-	buf.info.uid = getuid();
-	buf.info.pid = getpid();
-	switch (ttyname_r(STDIN_FILENO, buf.info.tty, TTY_NAME_MAX)) {
+	rtc->mq = mq_open(rtc->mq_name, O_WRONLY | O_CLOEXEC);
+	buf.nstate = rtc->new_state;
+	buf.uid = getuid();
+	buf.pid = getpid();
+	switch (ttyname_r(STDIN_FILENO, buf.tty, TTY_NAME_MAX)) {
 	case 0:
 	case ENOTTY:
 		/* nothing */
@@ -124,17 +124,14 @@ static int change_state(struct runtime_config *restrict rtc)
 		err(EXIT_FAILURE, "ttyname_r failed");
 	}
 	if (rtc->new_reason)
-		memcpy(buf.info.reason, rtc->new_reason, strlen(rtc->new_reason) + 1);
+		memcpy(buf.reason, rtc->new_reason, strlen(rtc->new_reason) + 1);
 	else
-		buf.info.reason[0] = '\0';
+		buf.reason[0] = '\0';
 	if (run_script(rtc, F5GS_PRE) && !rtc->force)
 		return SCRIPT_PRE_FAILED;
-	if ((rtc->ipc_key = ftok(rtc->pid_file, buf.mtype)) < 0)
-		errx(EXIT_FAILURE, "ftok: is f5gs server process running?");
-	if ((qid = msgget(rtc->ipc_key, IPC_MODE)) < 0)
-		errx(EXIT_FAILURE, "msgget failed: server stopped or a version mismatch?");
-	if (msgsnd(qid, (void *)&buf, sizeof(buf.info), 0) != 0)
-		err(EXIT_FAILURE, "ipc message sending failed");
+	if (mq_send(rtc->mq, msg, sizeof(buf), 0) < 0)
+		errx(EXIT_FAILURE, "ipc message sending failed");
+	mq_close(rtc->mq);
 	if (run_script(rtc, F5GS_POST) && !rtc->force)
 		return SCRIPT_POST_FAILED;
 	return SCRIPT_OK;

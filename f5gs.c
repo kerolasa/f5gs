@@ -111,6 +111,11 @@ static char *construct_pid_file(struct runtime_config *restrict rtc)
 		       ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
 	if (ret < 0)
 		err(EXIT_FAILURE, "asprintf failed");
+	ret =
+	    asprintf(&rtc->mq_name, "/%s_%s:%d", PACKAGE_NAME, s,
+		     ntohs(((struct sockaddr_in *)(rtc->res->ai_addr))->sin_port));
+	if (ret < 0)
+		err(EXIT_FAILURE, "asprintf failed");
 	return path;
 }
 

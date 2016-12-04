@@ -1,6 +1,7 @@
 #ifndef F5GS_HEADER_H
-
 # define F5GS_HEADER_H
+
+# include <mqueue.h>
 
 # define MESSAGE_ERROR		SD_ID128_MAKE(e7,23,7d,b8,48,ae,40,91,b5,ce,09,b2,eb,b7,59,44)
 # define MESSAGE_STATE_CHANGE	SD_ID128_MAKE(74,60,5f,27,15,d3,4b,01,8a,2c,61,c3,7a,99,4c,7b)
@@ -85,7 +86,8 @@ struct runtime_config {
 	char *new_reason;			/* message the client will add to the new state */
 	struct timespec previous_change;	/* timestamp of the previous change */
 	struct timespec previous_mono;		/* monotonic timestamp of the previous change */
-	key_t ipc_key;				/* IPC message queue key */
+	mqd_t mq;				/* IPC message queue */
+	char *mq_name;				/* IPC message queue name, based on listen & port */
 	unsigned int
 			s:1,			/* current state_mesg structure in use */
 			monotonic:1,		/* clock_gettime() is using monotonic time */
@@ -106,11 +108,6 @@ struct state_info {				/* IPC message payload */
 	uid_t uid;				/* uid of the process that set the state */
 	pid_t pid;				/* pid of the process that set the state */
 	char tty[TTY_NAME_MAX];			/* tty of the process that set the state */
-};
-
-struct state_change_msg {			/* actual IPC message */
-	long mtype;				/* IPC message type */
-	struct state_info info;			/* IPC message data */
 };
 
 /* functions that are called a cross files  */
