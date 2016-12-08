@@ -163,7 +163,7 @@ static void accept_connection(struct runtime_config *restrict rtc)
 	event.events = EPOLLIN;
 	event.data.ptr = socket_action;
 	socket_action->fd = client_socket;
-	socket_action->is_socket = 1;
+	socket_action->type = EV_CLIENT_SOCKET;
 	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, client_socket, &event) < 0) {
 		warnlog(rtc, "epoll_ctl failed");
 		return;
@@ -234,19 +234,25 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 			struct f5gs_action *action;
 			struct epoll_event event;
 
-			if (events[i].data.fd == rtc->server_socket) {
-				accept_connection(rtc);
-				continue;
-			}
 			action = (struct f5gs_action *) events[i].data.ptr;
-			if (action->is_socket)
-				write_reason(rtc, action->fd);
-			memset(&event, 0, sizeof event);
-			if (epoll_ctl(rtc->epollfd, EPOLL_CTL_DEL, action->fd, &event))
-				warnlog(rtc, "removing socket epoll");
-			if (close(action->fd))
-				warnlog(rtc, "socket close");
-			free(action);
+			switch (action->type) {
+			case EV_SERVER_SOCKET:
+				accept_connection(rtc);
+				break;
+			case EV_CLIENT_SOCKET:
+				if (action->type == EV_CLIENT_SOCKET)
+					write_reason(rtc, action->fd);
+				memset(&event, 0, sizeof event);
+				if (epoll_ctl(rtc->epollfd, EPOLL_CTL_DEL, action->fd, &event))
+					warnlog(rtc, "removing socket epoll");
+				if (close(action->fd))
+					warnlog(rtc, "socket close");
+				free(action);
+				break;
+			default:
+				abort();
+				break;
+			}
 		}
 	}
 	free(events);
@@ -494,6 +500,7 @@ static void run_server(struct runtime_config *restrict rtc)
 		.sa_handler = catch_stop,
 		.sa_flags = 0
 	};
+	struct f5gs_action *socket_action = xmalloc(sizeof(struct f5gs_action));
 #ifdef HAVE_LIBSYSTEMD
 	const int ret = sd_listen_fds(0);
 
@@ -535,7 +542,9 @@ static void run_server(struct runtime_config *restrict rtc)
 		faillog(rtc, "epoll_create failed");
 	memset(&event, 0, sizeof event);
 	event.events = EPOLLIN | EPOLLET;
-	event.data.fd = rtc->server_socket;
+	event.data.ptr = socket_action;
+	socket_action->fd = rtc->server_socket;
+	socket_action->type = EV_SERVER_SOCKET;
 	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, rtc->server_socket, &event) < 0)
 		faillog(rtc, "epoll_ctl add socket failed");
 	create_worker(rtc);

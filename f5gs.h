@@ -61,9 +61,14 @@ enum {
 	STRERRNO_BUF = 256			/* strerror_r() message buffer size */
 };
 
-struct f5gs_action {				/* structure passed to worker thread */
+struct f5gs_action {
 	int fd;					/* file descriptor epoll found being active */
-	int is_socket;				/* is the file descriptor socket */
+	int type;				/* EV_ type if the file descriptor */
+};
+
+enum {
+	EV_SERVER_SOCKET,
+	EV_CLIENT_SOCKET
 };
 
 struct state_msg {
