@@ -45,6 +45,7 @@
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/msg.h>
+#include <sys/signalfd.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/wait.h>
@@ -248,6 +249,9 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 				if (close(action->fd))
 					warnlog(rtc, "socket close");
 				free(action);
+				break;
+			case EV_SIGNAL_FD:
+				daemon_running = 0;
 				break;
 			default:
 				abort();
@@ -469,11 +473,6 @@ static void stop_server(struct runtime_config *restrict rtc)
 #endif
 }
 
-static void catch_stop(const int sig __attribute__((unused)))
-{
-	daemon_running = 0;
-}
-
 static void create_worker(struct runtime_config *restrict rtc)
 {
 	pthread_attr_t attr;
@@ -486,21 +485,12 @@ static void create_worker(struct runtime_config *restrict rtc)
 		faillog(rtc, "could not create worker thread");
 }
 
-static void setup_sigaction(struct runtime_config *restrict rtc, int sig, struct sigaction *sigact)
-{
-	if (sigaction(sig, sigact, NULL))
-		faillog(rtc, "sigaction failed");
-}
-
 static void run_server(struct runtime_config *restrict rtc)
 {
 	struct epoll_event event;
-	pthread_attr_t attr;
-	struct sigaction sigact = {
-		.sa_handler = catch_stop,
-		.sa_flags = 0
-	};
 	struct f5gs_action *socket_action = xmalloc(sizeof(struct f5gs_action));
+	struct f5gs_action *signal_action = xmalloc(sizeof(struct f5gs_action));
+	sigset_t mask;
 #ifdef HAVE_LIBSYSTEMD
 	const int ret = sd_listen_fds(0);
 
@@ -526,8 +516,6 @@ static void run_server(struct runtime_config *restrict rtc)
 		if (listen(rtc->server_socket, SOMAXCONN))
 			err(EXIT_FAILURE, "unable to listen");
 	}
-	if (pthread_attr_init(&attr))
-		err(EXIT_FAILURE, "cannot init thread attribute");
 
 	if (!rtc->run_foreground) {
 		daemonize();
@@ -540,6 +528,7 @@ static void run_server(struct runtime_config *restrict rtc)
 	if ((rtc->epollfd = epoll_create(NUM_EVENTS)) < 0)
 #endif
 		faillog(rtc, "epoll_create failed");
+
 	memset(&event, 0, sizeof event);
 	event.events = EPOLLIN | EPOLLET;
 	event.data.ptr = socket_action;
@@ -547,6 +536,37 @@ static void run_server(struct runtime_config *restrict rtc)
 	socket_action->type = EV_SERVER_SOCKET;
 	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, rtc->server_socket, &event) < 0)
 		faillog(rtc, "epoll_ctl add socket failed");
+
+	sigemptyset(&mask);
+#ifdef SIGHUP
+	sigaddset(&mask, SIGHUP);
+#endif
+#ifdef SIGINT
+	sigaddset(&mask, SIGINT);
+#endif
+#ifdef SIGQUIT
+	sigaddset(&mask, SIGQUIT);
+#endif
+#ifdef SIGTERM
+	sigaddset(&mask, SIGTERM);
+#endif
+#ifdef SIGUSR1
+	sigaddset(&mask, SIGUSR1);
+#endif
+#ifdef SIGUSR2
+	sigaddset(&mask, SIGUSR2);
+#endif
+	if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1)
+		faillog(rtc, "sigprocmask");
+	memset(&event, 0, sizeof event);
+	event.events = EPOLLIN;
+	event.data.ptr = signal_action;
+	if ((signal_action->fd = signalfd(-1, &mask, 0)) < 0)
+		faillog(rtc, "signalfd");
+	signal_action->type = EV_SIGNAL_FD;
+	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, signal_action->fd, &event) < 0)
+		faillog(rtc, "epoll_ctl add signal failed");
+
 	create_worker(rtc);
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service started", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START), "STATE=%s",
@@ -555,27 +575,6 @@ static void run_server(struct runtime_config *restrict rtc)
 #else
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 	syslog(LOG_INFO, "started in state %s", state_message[rtc->current[rtc->s].state]);
-#endif
-	/* clean up after receiving signal */
-	if (sigemptyset(&sigact.sa_mask))
-		faillog(rtc, "sigemptyset failed");
-#ifdef SIGHUP
-	setup_sigaction(rtc, SIGHUP, &sigact);
-#endif
-#ifdef SIGINT
-	setup_sigaction(rtc, SIGINT, &sigact);
-#endif
-#ifdef SIGQUIT
-	setup_sigaction(rtc, SIGQUIT, &sigact);
-#endif
-#ifdef SIGTERM
-	setup_sigaction(rtc, SIGTERM, &sigact);
-#endif
-#ifdef SIGUSR1
-	setup_sigaction(rtc, SIGUSR1, &sigact);
-#endif
-#ifdef SIGUSR2
-	setup_sigaction(rtc, SIGUSR2, &sigact);
 #endif
 	while (daemon_running)
 		wait_state_change(rtc);
