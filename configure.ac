@@ -54,8 +54,7 @@ AC_FUNC_MMAP
 AC_CHECK_FUNCS([ \
 	clearenv \
 	epoll_create \
-	epoll_create1 \
-	timerfd_create \
+	epoll_create1
 ])
 
 dnl pthread_setname_np is an addition to glibc 2.12, and might be
