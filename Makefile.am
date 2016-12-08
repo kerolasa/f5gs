@@ -22,7 +22,6 @@ f5gs_SOURCES = f5gs.c client.c server.c f5gs.h
 f5gs_LDADD = \
 	$(top_builddir)/lib/lib$(PACKAGE).la \
 	-lrt \
-	$(CLOCKGETTIME_LIBS) \
 	$(GETADDRINFO_LIB) \
 	$(HOSTENT_LIB) \
 	$(INET_NTOP_LIB) \
