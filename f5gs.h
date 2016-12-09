@@ -69,7 +69,8 @@ struct f5gs_action {
 enum {
 	EV_SERVER_SOCKET,
 	EV_CLIENT_SOCKET,
-	EV_SIGNAL_FD
+	EV_SIGNAL_FD,
+	EV_MESSAGE_QUEUE
 };
 
 struct state_msg {

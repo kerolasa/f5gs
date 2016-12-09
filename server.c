@@ -72,6 +72,7 @@
 
 /* unavoidable function prototypes */
 static void stop_server(struct runtime_config *restrict rtc);
+static void change_state(struct runtime_config *rtc);
 
 /* global variables */
 volatile sig_atomic_t daemon_running;
@@ -161,7 +162,7 @@ static void accept_connection(struct runtime_config *restrict rtc)
 		return;
 	}
 	memset(&event, 0, sizeof event);
-	event.events = EPOLLIN;
+	event.events = EPOLLIN | EPOLLONESHOT;
 	event.data.ptr = socket_action;
 	socket_action->fd = client_socket;
 	socket_action->type = EV_CLIENT_SOCKET;
@@ -212,9 +213,8 @@ static void write_reason(struct runtime_config *restrict rtc, int socket)
 	}
 }
 
-static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
+static void handle_requests(struct runtime_config *rtc)
 {
-	struct runtime_config *rtc = voidpt;
 	struct epoll_event *events;
 
 #ifdef HAVE_PTHREAD_SETNAME_NP
@@ -253,6 +253,9 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 			case EV_SIGNAL_FD:
 				daemon_running = 0;
 				break;
+			case EV_MESSAGE_QUEUE:
+				change_state(rtc);
+				break;
 			default:
 				abort();
 				break;
@@ -260,7 +263,7 @@ static void __attribute__((__noreturn__)) *handle_requests(void *voidpt)
 		}
 	}
 	free(events);
-	pthread_exit(NULL);
+	return;
 }
 
 static int open_pid_file(struct runtime_config *restrict rtc)
@@ -369,73 +372,57 @@ static void read_status_from_file(struct runtime_config *restrict rtc)
 
 static void daemonize(void)
 {
-	switch (fork()) {
-	case -1:
-		err(EXIT_FAILURE, "cannot fork");
-	case 0:
-		break;
-	default:
-		_exit(EXIT_SUCCESS);
-	}
-	if (!setsid())
-		err(EXIT_FAILURE, "cannot setsid");
 	if (daemon(0, 0))
 		err(EXIT_FAILURE, "daemon");
 }
 
-static void wait_state_change(struct runtime_config *rtc)
+static void change_state(struct runtime_config *rtc)
 {
 	int tmp_s;
 	struct state_info buf;
 	char *msg = (char *)&buf;
-	struct mq_attr attr = {.mq_maxmsg = 5,.mq_msgsize = sizeof(buf) };
 
-	if ((rtc->mq = mq_open(rtc->mq_name, O_CREAT | O_RDONLY, 0600, &attr)) == (mqd_t) - 1)
-		faillog(rtc, "could not create message queue");
-	while (daemon_running) {
-		if (mq_receive(rtc->mq, msg, sizeof(buf), NULL) < 0) {
-			if (errno == EINTR)
-				continue;
-			warnlog(rtc, "receiving ipc message failed");
+	while (mq_receive(rtc->mq, msg, sizeof(buf), NULL) < 0) {
+		if (errno == EINTR)
 			continue;
-		}
-		if (!valid_state(buf.nstate)) {
-#ifdef HAVE_LIBSYSTEMD
-			sd_journal_send("MESSAGE=unknown state change: %d", buf.nstate,
-					"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR), "PRIORITY=%d", LOG_ERR,
-					NULL);
-#else
-			syslog(LOG_INFO, "unknown state change: %d", buf.nstate);
-#endif
-			continue;
-		}
-#ifdef HAVE_LIBSYSTEMD
-		sd_journal_send("MESSAGE=state change %s -> %s", state_message[rtc->current[rtc->s].state],
-				state_message[buf.nstate], "MESSAGE_ID=%s",
-				SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO,
-				"SENDER_UID=%ld", buf.uid, "SENDER_PID=%ld", buf.pid, "SENDER_TTY=%s", buf.tty, NULL);
-#else
-		syslog(LOG_INFO, "state change received from uid %d pid %d tty %s, state %s -> %s", buf.uid,
-		       buf.pid, buf.tty, state_message[rtc->current[rtc->s].state], state_message[buf.nstate]);
-#endif
-		tmp_s = rtc->s ? 0 : 1;
-		rtc->current[tmp_s].state = buf.nstate;
-		rtc->current[tmp_s].len = strlen(state_message[buf.nstate]);
-		clock_gettime(CLOCK_REALTIME, &rtc->previous_change);
-		gettime_monotonic(&rtc->previous_mono);
-		rtc->monotonic = 1;
-		if (add_tstamp_to_reason(rtc, tmp_s) != 0)
-			goto error;
-		memccpy((rtc->current[tmp_s].reason + TIME_STAMP_LEN), buf.reason, '\0', REASON_TEXT);
-		rtc->current[tmp_s].reason[MAX_MESSAGE - 1] = '\0';
-		update_pid_file(rtc, tmp_s);
-		/* flip which structure is in use, this allows lockless reads */
-		rtc->s = tmp_s;
-		continue;
- error:
-		warnlog(rtc, "previous state change time cannot be reported");
-		memset(rtc->current[rtc->s].reason, 0, MAX_MESSAGE);
+		warnlog(rtc, "receiving ipc message failed");
+		return;
 	}
+	if (!valid_state(buf.nstate)) {
+#ifdef HAVE_LIBSYSTEMD
+		sd_journal_send("MESSAGE=unknown state change: %d", buf.nstate,
+				"MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_ERROR), "PRIORITY=%d", LOG_ERR, NULL);
+#else
+		syslog(LOG_INFO, "unknown state change: %d", buf.nstate);
+#endif
+		return;
+	}
+#ifdef HAVE_LIBSYSTEMD
+	sd_journal_send("MESSAGE=state change %s -> %s", state_message[rtc->current[rtc->s].state],
+			state_message[buf.nstate], "MESSAGE_ID=%s",
+			SD_ID128_CONST_STR(MESSAGE_STATE_CHANGE), "PRIORITY=%d", LOG_INFO,
+			"SENDER_UID=%ld", buf.uid, "SENDER_PID=%ld", buf.pid, "SENDER_TTY=%s", buf.tty, NULL);
+#else
+	syslog(LOG_INFO, "state change received from uid %d pid %d tty %s, state %s -> %s", buf.uid,
+	       buf.pid, buf.tty, state_message[rtc->current[rtc->s].state], state_message[buf.nstate]);
+#endif
+	tmp_s = rtc->s ? 0 : 1;
+	rtc->current[tmp_s].state = buf.nstate;
+	rtc->current[tmp_s].len = strlen(state_message[buf.nstate]);
+	clock_gettime(CLOCK_REALTIME, &rtc->previous_change);
+	gettime_monotonic(&rtc->previous_mono);
+	rtc->monotonic = 1;
+	if (add_tstamp_to_reason(rtc, tmp_s) != 0)
+		goto error;
+	memccpy((rtc->current[tmp_s].reason + TIME_STAMP_LEN), buf.reason, '\0', REASON_TEXT);
+	rtc->current[tmp_s].reason[MAX_MESSAGE - 1] = '\0';
+	update_pid_file(rtc, tmp_s);
+	/* flip which structure is in use, this allows lockless reads */
+	rtc->s = tmp_s;
+	return;
+ error:
+	warnlog(rtc, "previous state change time cannot be reported");
+	memset(rtc->current[rtc->s].reason, 0, MAX_MESSAGE);
 }
 
 static void stop_server(struct runtime_config *restrict rtc)
@@ -473,26 +460,17 @@ static void stop_server(struct runtime_config *restrict rtc)
 #endif
 }
 
-static void create_worker(struct runtime_config *restrict rtc)
-{
-	pthread_attr_t attr;
-
-	if (pthread_attr_init(&attr))
-		faillog(rtc, "cannot init thread attribute");
-	if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED))
-		faillog(rtc, "cannot use PTHREAD_CREATE_DETACHED");
-	if (pthread_create(&rtc->worker, NULL, handle_requests, rtc))
-		faillog(rtc, "could not create worker thread");
-}
-
 static void run_server(struct runtime_config *restrict rtc)
 {
 	struct epoll_event event;
 	struct f5gs_action *socket_action = xmalloc(sizeof(struct f5gs_action));
 	struct f5gs_action *signal_action = xmalloc(sizeof(struct f5gs_action));
+	struct f5gs_action *message_queue = xmalloc(sizeof(struct f5gs_action));
 	sigset_t mask;
 #ifdef HAVE_LIBSYSTEMD
 	const int ret = sd_listen_fds(0);
+	struct state_info buf;
+	struct mq_attr attr = {.mq_maxmsg = 5,.mq_msgsize = sizeof(buf) };
 
 	if (ret == 1)
 		rtc->server_socket = SD_LISTEN_FDS_START + 0;
@@ -530,7 +508,7 @@ static void run_server(struct runtime_config *restrict rtc)
 		faillog(rtc, "epoll_create failed");
 
 	memset(&event, 0, sizeof event);
-	event.events = EPOLLIN | EPOLLET;
+	event.events = EPOLLIN;
 	event.data.ptr = socket_action;
 	socket_action->fd = rtc->server_socket;
 	socket_action->type = EV_SERVER_SOCKET;
@@ -567,7 +545,6 @@ static void run_server(struct runtime_config *restrict rtc)
 	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, signal_action->fd, &event) < 0)
 		faillog(rtc, "epoll_ctl add signal failed");
 
-	create_worker(rtc);
 #ifdef HAVE_LIBSYSTEMD
 	sd_journal_send("MESSAGE=service started", "MESSAGE_ID=%s", SD_ID128_CONST_STR(MESSAGE_STOP_START), "STATE=%s",
 			state_message[rtc->current[rtc->s].state], "PRIORITY=%d", LOG_INFO, NULL);
@@ -576,8 +553,18 @@ static void run_server(struct runtime_config *restrict rtc)
 	openlog(PACKAGE_NAME, LOG_PID, LOG_DAEMON);
 	syslog(LOG_INFO, "started in state %s", state_message[rtc->current[rtc->s].state]);
 #endif
-	while (daemon_running)
-		wait_state_change(rtc);
+
+
+	if ((rtc->mq = mq_open(rtc->mq_name, O_CREAT | O_RDONLY, 0600, &attr)) == (mqd_t) - 1)
+		faillog(rtc, "could not create message queue");
+	event.events = EPOLLIN;
+	event.data.ptr = message_queue;
+	message_queue->fd = rtc->mq;
+	message_queue->type = EV_MESSAGE_QUEUE;
+	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, message_queue->fd, &event) < 0)
+		faillog(rtc, "epoll add message queue failed");
+
+	handle_requests(rtc);
 	stop_server(rtc);
 }
 
