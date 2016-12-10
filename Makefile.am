@@ -27,7 +27,6 @@ f5gs_LDADD = \
 	$(INET_NTOP_LIB) \
 	$(LIBSOCKET) \
 	$(LIB_POLL) \
-	$(LIB_PTHREAD) \
 	$(LIB_SELECT) \
 	$(LTLIBINTL) \
 	$(LTLIBTHREAD) \

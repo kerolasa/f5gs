@@ -81,9 +81,10 @@ struct state_msg {
 
 struct runtime_config {
 	struct addrinfo *res;			/* connection/listen address of --address */
-	int server_socket;			/* listen socket */
 	int epollfd;				/* socket epoll() file descriptor */
-	pthread_t worker;			/* accepted connection request handler */
+	struct f5gs_action *listen_event;	/* epoll data for server socket event */
+	struct f5gs_action *signal_event;	/* epoll data for signalfd event */
+	struct f5gs_action *ipc_mq_event;	/* epoll data for message queue event */
 	struct state_msg current[2];		/* current and next state message */
 	const char *state_dir;			/* directory where state files are wrote */
 	char *pid_file;				/* path to the state file for this instance */
@@ -93,9 +94,9 @@ struct runtime_config {
 	char *new_reason;			/* message the client will add to the new state */
 	struct timespec previous_change;	/* timestamp of the previous change */
 	struct timespec previous_mono;		/* monotonic timestamp of the previous change */
-	mqd_t mq;				/* IPC message queue */
 	char *mq_name;				/* IPC message queue name, based on listen & port */
 	unsigned int
+			stop_requested:1,	/* should service be stopped */
 			s:1,			/* current state_mesg structure in use */
 			monotonic:1,		/* clock_gettime() is using monotonic time */
 			why:1,			/* is --why option in use */

@@ -110,8 +110,9 @@ static int change_state(struct runtime_config *restrict rtc)
 {
 	struct state_info buf = { 0 };
 	const char *msg = (const char *)&buf;
+	mqd_t mq_fd;
 
-	rtc->mq = mq_open(rtc->mq_name, O_WRONLY | O_CLOEXEC);
+	mq_fd = mq_open(rtc->mq_name, O_WRONLY | O_CLOEXEC);
 	buf.nstate = rtc->new_state;
 	buf.uid = getuid();
 	buf.pid = getpid();
@@ -129,9 +130,9 @@ static int change_state(struct runtime_config *restrict rtc)
 		buf.reason[0] = '\0';
 	if (run_script(rtc, F5GS_PRE) && !rtc->force)
 		return SCRIPT_PRE_FAILED;
-	if (mq_send(rtc->mq, msg, sizeof(buf), 0) < 0)
+	if (mq_send(mq_fd, msg, sizeof(buf), 0) < 0)
 		errx(EXIT_FAILURE, "ipc message sending failed");
-	mq_close(rtc->mq);
+	mq_close(mq_fd);
 	if (run_script(rtc, F5GS_POST) && !rtc->force)
 		return SCRIPT_POST_FAILED;
 	return SCRIPT_OK;
@@ -177,6 +178,7 @@ char *get_server_status(const struct runtime_config *restrict rtc)
 		err(EXIT_FAILURE, "reading socket failed");
 	else
 		buf[buflen] = '\0';
+	close(sfd);
 	return buf;
 }
 
