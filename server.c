@@ -137,29 +137,29 @@ static void accept_connection(struct runtime_config *restrict rtc)
 	struct sockaddr_in client_addr;
 	socklen_t addr_len = sizeof client_addr;
 	struct epoll_event event;
-	struct f5gs_action *listen_event = malloc(sizeof(struct f5gs_action));
+	struct f5gs_action *client_socket = malloc(sizeof(struct f5gs_action));
 
-	if (listen_event == NULL) {
+	if (client_socket == NULL) {
 		warnlog(rtc, "could not allocate memory");
 		return;
 	}
-	if ((listen_event->fd = accept(rtc->listen_event->fd, (struct sockaddr *)&client_addr, &addr_len)) < 0) {
+	if ((client_socket->fd = accept(rtc->listen_event->fd, (struct sockaddr *)&client_addr, &addr_len)) < 0) {
 		warnlog(rtc, "accept failed");
 		return;
 	}
-	if (send(listen_event->fd, state_message[rtc->current[rtc->s].state], rtc->current[rtc->s].len, 0) < 0) {
+	if (send(client_socket->fd, state_message[rtc->current[rtc->s].state], rtc->current[rtc->s].len, 0) < 0) {
 		warnlog(rtc, "send failed");
 		return;
 	}
-	if (make_socket_none_blocking(rtc, listen_event->fd)) {
+	if (make_socket_none_blocking(rtc, client_socket->fd)) {
 		warnlog(rtc, "fcntl none-blocking failed");
 		return;
 	}
 	memset(&event, 0, sizeof event);
 	event.events = EPOLLIN | EPOLLONESHOT;
-	event.data.ptr = listen_event;
-	listen_event->type = EV_CLIENT_SOCKET;
-	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, rtc->listen_event->fd, &event) < 0) {
+	event.data.ptr = client_socket;
+	client_socket->type = EV_CLIENT_SOCKET;
+	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, client_socket->fd, &event) < 0) {
 		warnlog(rtc, "epoll_ctl failed");
 		return;
 	}
