@@ -143,7 +143,7 @@ static void accept_connection(struct runtime_config *restrict rtc)
 		warnlog(rtc, "accept failed");
 		return;
 	}
-	if (send(client_socket, state_message[rtc->current[rtc->s].state], rtc->current[rtc->s].len, 0) < 0) {
+	if (send(client_socket, state_message[rtc->current[rtc->s].state], rtc->current[rtc->s].len, MSG_NOSIGNAL) < 0) {
 		warnlog(rtc, "send failed");
 		return;
 	}
@@ -177,7 +177,7 @@ static void write_reason(struct runtime_config *restrict rtc, int socket)
 			SECONDS_IN_MIN = 60
 		};
 
-		if (send(socket, rtc->current[rtc->s].reason, strlen(rtc->current[rtc->s].reason), 0) < 0)
+		if (send(socket, rtc->current[rtc->s].reason, strlen(rtc->current[rtc->s].reason), MSG_NOSIGNAL) < 0)
 			warnlog(rtc, "sending reason failed");
 		if (rtc->monotonic) {
 			gettime_monotonic(&now);
@@ -195,7 +195,7 @@ static void write_reason(struct runtime_config *restrict rtc, int socket)
 			warnlog(rtc, "reason output truncated");
 			return;
 		}
-		if (send(socket, io_buf, len, 0) < 0)
+		if (send(socket, io_buf, len, MSG_NOSIGNAL) < 0)
 			warnlog(rtc, "send failed");
 	}
 }
