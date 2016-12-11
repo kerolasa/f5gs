@@ -55,22 +55,10 @@ enum {
 	/* receive buffer size */
 	CLIENT_SOCKET_BUF = MAX_MESSAGE + TIME_STAMP_LEN,
 	/* various */
-	NUM_EVENTS = 32,			/* epoll events */
+	NUM_EVENTS = 8,				/* epoll events */
 	STATE_CHANGE_VERIFY_TRIES = 64,		/* after state change status check */
 	IGNORE_BYTES = 256,			/* amount bytes server will ignore */
 	STRERRNO_BUF = 256			/* strerror_r() message buffer size */
-};
-
-struct f5gs_action {
-	int fd;					/* file descriptor epoll found being active */
-	int type;				/* EV_ type if the file descriptor */
-};
-
-enum {
-	EV_SERVER_SOCKET,
-	EV_CLIENT_SOCKET,
-	EV_SIGNAL_FD,
-	EV_MESSAGE_QUEUE
 };
 
 struct state_msg {
@@ -82,9 +70,9 @@ struct state_msg {
 struct runtime_config {
 	struct addrinfo *res;			/* connection/listen address of --address */
 	int epollfd;				/* socket epoll() file descriptor */
-	struct f5gs_action *listen_event;	/* epoll data for server socket event */
-	struct f5gs_action *signal_event;	/* epoll data for signalfd event */
-	struct f5gs_action *ipc_mq_event;	/* epoll data for message queue event */
+	int listen_event;			/* epoll fd for server socket event */
+	int signal_event;			/* epoll fd for signalfd event */
+	mqd_t ipc_mq_event;			/* epoll fd for message queue event */
 	struct state_msg current[2];		/* current and next state message */
 	const char *state_dir;			/* directory where state files are wrote */
 	char *pid_file;				/* path to the state file for this instance */
