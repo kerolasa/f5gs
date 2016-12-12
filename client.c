@@ -40,6 +40,7 @@
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <paths.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -140,45 +141,43 @@ static int change_state(struct runtime_config *restrict rtc)
 
 char *get_server_status(const struct runtime_config *restrict rtc)
 {
-	int sfd;
 	const struct timeval timeout = {
 		.tv_sec = 1L,
 		.tv_usec = 0L
 	};
 	static char buf[CLIENT_SOCKET_BUF];
-	ssize_t buflen;
+	ssize_t buflen, msg_len = 0;
+	struct pollfd sfd[1];
+	int ms = 2;
 
-	if (!(sfd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol))) {
+	if (!(sfd[0].fd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol))) {
 		if (rtc->quiet)
 			exit(STATE_UNKNOWN);
 		else
 			err(EXIT_FAILURE, "cannot create socket");
 	}
-	if (setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO | TCP_NODELAY, (void *)&timeout, sizeof(timeout)))
+	if (setsockopt(sfd[0].fd, SOL_SOCKET, SO_SNDTIMEO | TCP_NODELAY, (void *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed");
-	if (connect(sfd, rtc->res->ai_addr, rtc->res->ai_addrlen)) {
+	if (connect(sfd[0].fd, rtc->res->ai_addr, rtc->res->ai_addrlen)) {
 		if (rtc->quiet)
 			exit(STATE_UNKNOWN);
 		else
 			err(EXIT_FAILURE, "cannot connect");
 	}
 	if (rtc->why) {
-		struct timespec waittime = {
-			.tv_sec = 0L,
-			.tv_nsec = 1000000L
-		};
-		if (send(sfd, WHYWHEN, sizeof(WHYWHEN), 0) < 0)
+		if (send(sfd[0].fd, WHYWHEN, sizeof(WHYWHEN), 0) < 0)
 			err(EXIT_FAILURE, "sending why request failed");
-		/* this gives handle_requests() time to write both status
-		 * and reason to socket */
-		nanosleep(&waittime, NULL);
 	}
-	buflen = recv(sfd, buf, sizeof(buf), 0);
-	if (buflen < 0)
-		err(EXIT_FAILURE, "reading socket failed");
-	else
-		buf[buflen] = '\0';
-	close(sfd);
+	sfd[0].events = POLLIN;
+	while ((0 < poll(sfd, 1, ms)) && ms < 1025) {
+		buflen = recv(sfd[0].fd, buf + msg_len, sizeof(buf) - msg_len, 0);
+		if (buflen < 0)
+			err(EXIT_FAILURE, "reading socket failed");
+		msg_len += buflen;
+		ms *= 2;
+	}
+	buf[msg_len] = '\0';
+	close(sfd[0].fd);
 	return buf;
 }
 
