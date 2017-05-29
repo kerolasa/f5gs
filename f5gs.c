@@ -148,7 +148,6 @@ int main(const int argc, char **argv)
 		{"enable", no_argument, NULL, 'e'},
 		{"server", no_argument, NULL, 's'},
 		{"address", required_argument, NULL, 'a'},
-		{"listen", required_argument, NULL, 'l'},
 		{"port", required_argument, NULL, 'p'},
 		{"statedir", required_argument, NULL, STATEDIR_OPT},
 		{"quiet", no_argument, NULL, 'q'},
@@ -166,7 +165,7 @@ int main(const int argc, char **argv)
 	atexit(close_stdout);
 	rtc.argv = argv;
 
-	while ((c = getopt_long(argc, argv, "dmesa:l:p:qVh", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "dmesa:p:qVh", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
 			rtc.new_state = STATE_DISABLE;
@@ -180,8 +179,6 @@ int main(const int argc, char **argv)
 		case 's':
 			server = 1;
 			break;
-		case 'l':	/* FIXME: to be removed after 2015-08-01 */
-			warnx("--listen is deprecated, use --address instead");
 		case 'a':
 			address = optarg;
 			break;
