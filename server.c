@@ -124,7 +124,7 @@ static int make_socket_none_blocking(struct runtime_config *restrict rtc, int so
 		warnlog(rtc, "fcntl F_GETFL failed");
 		return 1;
 	}
-	flags |= O_NONBLOCK;
+	flags |= O_NONBLOCK | FD_CLOEXEC;
 	if (fcntl(socket, F_SETFL, flags) < 0) {
 		warnlog(rtc, "fcntl F_SETFL failed");
 		return 1;
@@ -279,7 +279,7 @@ static void read_status_from_file(struct runtime_config *restrict rtc)
 	FILE *pidfd;
 	int ignored, state, version;
 
-	if (!(pidfd = fopen(rtc->pid_file, "r")))
+	if (!(pidfd = fopen(rtc->pid_file, "re")))
 		goto err;
 	errno = 0;
 	if (fscanf(pidfd, "%10d %1d %1d", &ignored, &state, &version) != 3 || errno != 0)
@@ -455,7 +455,7 @@ void start_server(struct runtime_config *restrict rtc)
 	{
 #endif
 		const int on = 1;
-		if (!(rtc->listen_event = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol)))
+		if (!(rtc->listen_event = socket(rtc->res->ai_family, SOCK_CLOEXEC | rtc->res->ai_socktype, rtc->res->ai_protocol)))
 			faillog(rtc, "cannot create socket");
 		if (setsockopt(rtc->listen_event, SOL_SOCKET, SO_REUSEADDR, (void *)&on, sizeof(on)))
 			faillog(rtc, "cannot set socket options");
@@ -467,7 +467,7 @@ void start_server(struct runtime_config *restrict rtc)
 			faillog(rtc, "unable to listen");
 	}
 #ifdef HAVE_EPOLL_CREATE1
-	if ((rtc->epollfd = epoll_create1(0)) < 0)
+	if ((rtc->epollfd = epoll_create1(EPOLL_CLOEXEC)) < 0)
 #else
 	if ((rtc->epollfd = epoll_create(NUM_EVENTS)) < 0)
 #endif
@@ -500,7 +500,7 @@ void start_server(struct runtime_config *restrict rtc)
 #endif
 	if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1)
 		faillog(rtc, "sigprocmask");
-	if ((rtc->signal_event = signalfd(-1, &mask, 0)) < 0)
+	if ((rtc->signal_event = signalfd(-1, &mask, SFD_CLOEXEC)) < 0)
 		faillog(rtc, "signalfd");
 	event.events = EPOLLIN | EPOLLONESHOT;
 	event.data.fd = rtc->signal_event;
@@ -508,7 +508,7 @@ void start_server(struct runtime_config *restrict rtc)
 		faillog(rtc, "epoll_ctl add signal failed");
 
 	/* setup IPC epoll that used for state changes */
-	if ((rtc->ipc_mq_event = mq_open(rtc->mq_name, O_CREAT | O_RDONLY, 0600, &attr)) == (mqd_t) - 1)
+	if ((rtc->ipc_mq_event = mq_open(rtc->mq_name, O_CREAT | O_RDONLY | O_CLOEXEC, 0600, &attr)) == (mqd_t) - 1)
 		faillog(rtc, "could not create message queue");
 	event.events = EPOLLIN;
 	event.data.fd = rtc->ipc_mq_event;

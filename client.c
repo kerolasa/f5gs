@@ -150,7 +150,7 @@ char *get_server_status(const struct runtime_config *restrict rtc)
 	struct pollfd sfd[1];
 	int ms = 2;
 
-	if (!(sfd[0].fd = socket(rtc->res->ai_family, rtc->res->ai_socktype, rtc->res->ai_protocol))) {
+	if (!(sfd[0].fd = socket(rtc->res->ai_family, SOCK_CLOEXEC | rtc->res->ai_socktype, rtc->res->ai_protocol))) {
 		if (rtc->quiet)
 			exit(STATE_UNKNOWN);
 		else
