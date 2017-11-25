@@ -375,6 +375,7 @@ static void wait_events(struct runtime_config *rtc)
 				change_state(rtc);
 			} else {
 				write_reason(rtc, events[i].data.fd);
+				epoll_ctl(rtc->epollfd, EPOLL_CTL_DEL, events[i].data.fd, &events[i]);
 				if (close(events[i].data.fd))
 					warnlog(rtc, "socket close");
 			}
