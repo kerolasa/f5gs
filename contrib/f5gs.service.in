@@ -12,5 +12,18 @@ Sockets=f5gs.socket
 Restart=always
 RestartSec=0
 
+MemoryDenyWriteExecute=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectHome=read-only
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictRealtime=true
+
+ProtectSystem=strict
+ReadWritePaths=@f5gs_rundir@
+
 [Install]
 WantedBy=multi-user.target
