@@ -52,6 +52,7 @@ AC_TYPE_SSIZE_T
 # Checks for library functions.
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([ \
+	accept4 \
 	clearenv \
 	epoll_create \
 	epoll_create1

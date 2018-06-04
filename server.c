@@ -139,7 +139,11 @@ static void accept_connection(struct runtime_config *restrict rtc)
 	struct epoll_event event = {.events = 0 };
 	int client_socket;
 
+#ifdef HAVE_ACCEPT4
+	if ((client_socket = accept4(rtc->listen_event, (struct sockaddr *)&client_addr, &addr_len, SOCK_CLOEXEC)) < 0) {
+#else
 	if ((client_socket = accept(rtc->listen_event, (struct sockaddr *)&client_addr, &addr_len)) < 0) {
+#endif
 		warnlog(rtc, "accept failed");
 		return;
 	}
