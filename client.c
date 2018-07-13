@@ -212,7 +212,7 @@ static char *getenv_str(const char *restrict name)
 	return tmpvar;
 }
 
-int verify_server_status(const struct runtime_config *restrict rtc)
+static int verify_server_status(const struct runtime_config *restrict rtc)
 {
 	int verify_tries = STATE_CHANGE_VERIFY_TRIES;
 
