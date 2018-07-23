@@ -156,7 +156,7 @@ char *get_server_status(const struct runtime_config *restrict rtc)
 		else
 			err(EXIT_FAILURE, "cannot create socket");
 	}
-	if (setsockopt(sfd[0].fd, SOL_SOCKET, SO_SNDTIMEO | TCP_NODELAY, (void *)&timeout, sizeof(timeout)))
+	if (setsockopt(sfd[0].fd, SOL_SOCKET, SO_SNDTIMEO | TCP_NODELAY, (const void *)&timeout, sizeof(timeout)))
 		err(EXIT_FAILURE, "setsockopt failed");
 	if (connect(sfd[0].fd, rtc->res->ai_addr, rtc->res->ai_addrlen)) {
 		if (rtc->quiet)

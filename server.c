@@ -462,7 +462,7 @@ void start_server(struct runtime_config *restrict rtc)
 		const int on = 1;
 		if (!(rtc->listen_event = socket(rtc->res->ai_family, SOCK_CLOEXEC | rtc->res->ai_socktype, rtc->res->ai_protocol)))
 			faillog(rtc, "cannot create socket");
-		if (setsockopt(rtc->listen_event, SOL_SOCKET, SO_REUSEADDR, (void *)&on, sizeof(on)))
+		if (setsockopt(rtc->listen_event, SOL_SOCKET, SO_REUSEADDR, (const void *)&on, sizeof(on)))
 			faillog(rtc, "cannot set socket options");
 		if (bind(rtc->listen_event, rtc->res->ai_addr, rtc->res->ai_addrlen))
 			faillog(rtc, "unable to bind");
