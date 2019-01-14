@@ -183,7 +183,7 @@ line options and arguments as the original
 .BR f5gs .
 See
 .I @datadir@/f5gs/pre-script
-for an example how to write a srcipt like this.
+for an example how to write a script like this.
 .TP
 .B @f5gs_post@
 An executable that is ran after status change is sent.  Return value of

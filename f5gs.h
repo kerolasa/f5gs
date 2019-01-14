@@ -78,7 +78,7 @@ struct runtime_config {
 	char *pid_file;				/* path to the state file for this instance */
 	FILE *pid_filefd;			/* open file handle to state file */
 	char **argv;				/* command line arguments */
-	state_code new_state;			/* state the client attemtps to set */
+	state_code new_state;			/* state the client attempts to set */
 	char *new_reason;			/* message the client will add to the new state */
 	struct timespec previous_change;	/* timestamp of the previous change */
 	struct timespec previous_mono;		/* monotonic timestamp of the previous change */
