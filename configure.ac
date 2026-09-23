@@ -52,10 +52,10 @@ AC_TYPE_SSIZE_T
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([ \
 	accept4 \
-	clearenv \
-	epoll_create \
-	epoll_create1
+	clearenv
 ])
+
+PKG_CHECK_MODULES([IO_URING], [liburing >= 2.0])
 
 AC_ARG_WITH([systemd],
 	AS_HELP_STRING([--with-systemd], [build with support for systemd]),

@@ -27,6 +27,8 @@ BuildRequires: texinfo
 BuildRequires: xz
 BuildRequires: autoconf >= 2.59
 BuildRequires: automake
+BuildRequires: pkgconfig(liburing)
+Requires: liburing
 Requires(post): chkconfig
 Requires(postun): initscripts
 Requires(preun): chkconfig

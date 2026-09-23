@@ -1,3 +1,9 @@
+## Unreleased
+
+The server event loop now uses io_uring through liburing instead of epoll.
+Building requires liburing 2.0 or newer. Running requires Linux 5.1 or newer
+with `CONFIG_IO_URING` enabled and sufficient permission to use io_uring.
+
 ## Release v1.1 - 2015-01-18
 
 Please do not use version 1.0, it's is broken.  The so called stable

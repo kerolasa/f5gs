@@ -9,8 +9,8 @@ pkgdesc="F5 Graceful Scaling"
 arch=('i686' 'x86_64')
 url=https://github.com/kerolasa/f5gs
 license=('MIT')
-depends=('pacman')
-makedepends=('git')
+depends=('liburing' 'pacman')
+makedepends=('git' 'liburing')
 source=("$pkgname"::'git://github.com/kerolasa/f5gs')
 md5sums=('SKIP')
 

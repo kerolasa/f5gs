@@ -19,8 +19,10 @@ SUBDIRS = lib
 
 bin_PROGRAMS = f5gs
 f5gs_SOURCES = f5gs.c client.c server.c f5gs.h
+f5gs_CFLAGS = $(IO_URING_CFLAGS)
 f5gs_LDADD = \
 	$(top_builddir)/lib/lib$(PACKAGE).la \
+	$(IO_URING_LIBS) \
 	-lrt \
 	$(GETADDRINFO_LIB) \
 	$(HOSTENT_LIB) \
@@ -33,7 +35,7 @@ f5gs_LDADD = \
 	$(SERVENT_LIB)
 
 if HAVE_SYSTEMD
-f5gs_CFLAGS = \
+f5gs_CFLAGS += \
 	$(SYSTEMD_DAEMON_CFLAGS) \
 	$(SYSTEMD_JOURNAL_CFLAGS) \
 	$(SYSTEMD_CFLAGS)

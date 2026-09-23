@@ -1,6 +1,7 @@
 #ifndef F5GS_HEADER_H
 # define F5GS_HEADER_H
 
+# include <liburing.h>
 # include <mqueue.h>
 
 # define MESSAGE_ERROR		SD_ID128_MAKE(e7,23,7d,b8,48,ae,40,91,b5,ce,09,b2,eb,b7,59,44)
@@ -55,7 +56,7 @@ enum {
 	/* receive buffer size */
 	CLIENT_SOCKET_BUF = MAX_MESSAGE + TIME_STAMP_LEN,
 	/* various */
-	NUM_EVENTS = 8,				/* epoll events */
+	IO_URING_QUEUE_DEPTH = 256,		/* io_uring submission queue depth */
 	STATE_CHANGE_VERIFY_TRIES = 64,		/* after state change status check */
 	IGNORE_BYTES = 256,			/* amount bytes server will ignore */
 	STRERRNO_BUF = 256			/* strerror_r() message buffer size */
@@ -69,10 +70,10 @@ struct state_msg {
 
 struct runtime_config {
 	struct addrinfo *res;			/* connection/listen address of --address */
-	int epollfd;				/* socket epoll() file descriptor */
-	int listen_event;			/* epoll fd for server socket event */
-	int signal_event;			/* epoll fd for signalfd event */
-	mqd_t ipc_mq_event;			/* epoll fd for message queue event */
+	struct io_uring ring;			/* io_uring event loop */
+	int listen_fd;				/* server listening socket */
+	int signal_fd;				/* signal file descriptor */
+	mqd_t ipc_mq;				/* IPC message queue descriptor */
 	struct state_msg current[2];		/* current and next state message */
 	const char *state_dir;			/* directory where state files are wrote */
 	char *pid_file;				/* path to the state file for this instance */
@@ -84,6 +85,7 @@ struct runtime_config {
 	struct timespec previous_mono;		/* monotonic timestamp of the previous change */
 	char *mq_name;				/* IPC message queue name, based on listen & port */
 	unsigned int
+			ring_initialized:1,	/* io_uring ring has been initialized */
 			stop_requested:1,	/* should service be stopped */
 			s:1,			/* current state_mesg structure in use */
 			monotonic:1,		/* clock_gettime() is using monotonic time */

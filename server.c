@@ -39,10 +39,11 @@
 #include <fcntl.h>
 #include <mqueue.h>
 #include <netdb.h>
+#include <poll.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/epoll.h>
 #include <sys/msg.h>
 #include <sys/signalfd.h>
 #include <sys/stat.h>
@@ -72,6 +73,18 @@
 /* unavoidable function prototypes */
 static void stop_server(struct runtime_config *restrict rtc);
 
+enum event_type {
+	EVENT_LISTENER = 0,
+	EVENT_SIGNAL,
+	EVENT_IPC,
+	EVENT_CLIENT
+};
+
+#define EVENT_DATA(type)	((uint64_t) (type))
+#define EVENT_CLIENT_DATA(fd)	(EVENT_DATA(EVENT_CLIENT) | ((uint64_t) (uint32_t) (fd) << 32))
+#define EVENT_SOURCE(data)	((enum event_type) ((data) & UINT32_C(3)))
+#define EVENT_FD(data)		((int) ((data) >> 32))
+
 static inline void gettime_monotonic(struct timespec *ts)
 {
 #ifdef CLOCK_MONOTONIC_RAW
@@ -99,7 +112,7 @@ static void warnlog(const struct runtime_config *restrict rtc, const char *restr
 
 	if (rtc->run_foreground && getppid() != 1)
 		warn("%s", msg);
-	if (strerror_r(errno, buf, sizeof(buf)))
+	if (strerror_r(errno, buf, sizeof(buf)) == 0)
 #ifdef HAVE_LIBSYSTEMD
 		sd_journal_send("MESSAGE=%s", msg, "STRERROR=%s", buf, "MESSAGE_ID=%s",
 				SD_ID128_CONST_STR(MESSAGE_ERROR), "PRIORITY=%d", LOG_ERR, NULL);
@@ -120,88 +133,118 @@ static int make_socket_none_blocking(struct runtime_config *restrict rtc, int so
 {
 	int flags;
 
-	if ((flags = fcntl(socket, F_GETFL)) < 0) {
-		warnlog(rtc, "fcntl F_GETFL failed");
+	if ((flags = fcntl(socket, F_GETFL)) < 0 || fcntl(socket, F_SETFL, flags | O_NONBLOCK) < 0) {
+		warnlog(rtc, "cannot make socket none-blocking");
 		return 1;
 	}
-	flags |= O_NONBLOCK | FD_CLOEXEC;
-	if (fcntl(socket, F_SETFL, flags) < 0) {
-		warnlog(rtc, "fcntl F_SETFL failed");
+	if ((flags = fcntl(socket, F_GETFD)) < 0 || fcntl(socket, F_SETFD, flags | FD_CLOEXEC) < 0) {
+		warnlog(rtc, "cannot make socket close-on-exec");
 		return 1;
+	}
+	return 0;
+}
+
+static int submit_poll_event(struct runtime_config *restrict rtc, int fd, uint64_t data)
+{
+	struct io_uring_sqe *sqe;
+	int ret;
+
+	if (!(sqe = io_uring_get_sqe(&rtc->ring)))
+		return -ENOSPC;
+	io_uring_prep_poll_add(sqe, fd, POLLIN);
+	/* The data64 helpers are not available in liburing 2.0. */
+	sqe->user_data = data;
+	ret = io_uring_submit(&rtc->ring);
+	if (ret < 0)
+		return ret;
+	if (ret != 1)
+		return -EIO;
+	return 0;
+}
+
+static int send_message(struct runtime_config *restrict rtc, int socket, const void *data, size_t len)
+{
+	const char *buf = data;
+	ssize_t sent;
+
+	while (len) {
+		if ((sent = send(socket, buf, len, MSG_NOSIGNAL)) < 0) {
+			if (errno == EINTR)
+				continue;
+			warnlog(rtc, "send failed");
+			return 1;
+		}
+		if (!sent) {
+			errno = EPIPE;
+			warnlog(rtc, "send failed");
+			return 1;
+		}
+		buf += (size_t) sent;
+		len -= (size_t) sent;
 	}
 	return 0;
 }
 
 static void accept_connection(struct runtime_config *restrict rtc)
 {
-	struct sockaddr_in client_addr;
-	socklen_t addr_len = sizeof client_addr;
-	struct epoll_event event = {.events = 0 };
-	int client_socket;
+	int client_socket, ret;
 
 #ifdef HAVE_ACCEPT4
-	if ((client_socket = accept4(rtc->listen_event, (struct sockaddr *)&client_addr, &addr_len, SOCK_CLOEXEC)) < 0) {
+	if ((client_socket =
+		 accept4(rtc->listen_fd, NULL, NULL, SOCK_CLOEXEC | SOCK_NONBLOCK)) < 0) {
 #else
-	if ((client_socket = accept(rtc->listen_event, (struct sockaddr *)&client_addr, &addr_len)) < 0) {
+	if ((client_socket = accept(rtc->listen_fd, NULL, NULL)) < 0) {
 #endif
-		warnlog(rtc, "accept failed");
+		if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR && errno != ECONNABORTED)
+			warnlog(rtc, "accept failed");
 		return;
 	}
-	if (send(client_socket, state_message[rtc->current[rtc->s].state], rtc->current[rtc->s].len, MSG_NOSIGNAL) < 0) {
-		warnlog(rtc, "send failed");
+	if (make_socket_none_blocking(rtc, client_socket)
+	    || send_message(rtc, client_socket, state_message[rtc->current[rtc->s].state],
+			    rtc->current[rtc->s].len)) {
+		close(client_socket);
 		return;
 	}
-	if (make_socket_none_blocking(rtc, client_socket)) {
-		warnlog(rtc, "fcntl none-blocking failed");
-		return;
-	}
-	event.events = EPOLLIN | EPOLLONESHOT;
-	event.data.fd = client_socket;
-	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, client_socket, &event) < 0) {
-		warnlog(rtc, "epoll_ctl failed");
-		return;
+	ret = submit_poll_event(rtc, client_socket, EVENT_CLIENT_DATA(client_socket));
+	if (ret < 0) {
+		errno = -ret;
+		warnlog(rtc, "io_uring poll_add failed");
+		close(client_socket);
 	}
 }
 
-static void write_reason(struct runtime_config *restrict rtc, int socket)
+static void write_reason(struct runtime_config *restrict rtc, int socket, const char *request)
 {
-	char io_buf[IGNORE_BYTES];
+	char time_buf[IGNORE_BYTES];
+	struct timespec now, delta;
+	int len;
+	enum {
+		SECONDS_IN_DAY = 86400,
+		SECONDS_IN_HOUR = 3600,
+		SECONDS_IN_MIN = 60
+	};
 
-	if (recv(socket, io_buf, sizeof(io_buf), 0) < 0) {
-		if (errno != EAGAIN)
-			warnlog(rtc, "receive failed");
+	if (memcmp(request, WHYWHEN, sizeof(WHYWHEN) - 1))
+		return;
+	if (send_message(rtc, socket, rtc->current[rtc->s].reason, strlen(rtc->current[rtc->s].reason)))
+		return;
+	if (rtc->monotonic) {
+		gettime_monotonic(&now);
+		timespec_subtract(&now, &rtc->previous_mono, &delta);
+	} else {
+		clock_gettime(CLOCK_REALTIME, &now);
+		timespec_subtract(&now, &rtc->previous_change, &delta);
+	}
+	len = snprintf(time_buf, sizeof(time_buf), "\n%ld days %02ld:%02ld:%02ld,%09ld ago",
+		       delta.tv_sec / SECONDS_IN_DAY, delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
+		       delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN, delta.tv_sec % SECONDS_IN_MIN,
+		       delta.tv_nsec);
+	if (len < 0 || (size_t) len >= sizeof(time_buf)) {
+		errno = EOVERFLOW;
+		warnlog(rtc, "reason output truncated");
 		return;
 	}
-	if (!memcmp(io_buf, WHYWHEN, sizeof(WHYWHEN))) {
-		struct timespec now, delta;
-		int len;
-		enum {
-			SECONDS_IN_DAY = 86400,
-			SECONDS_IN_HOUR = 3600,
-			SECONDS_IN_MIN = 60
-		};
-
-		if (send(socket, rtc->current[rtc->s].reason, strlen(rtc->current[rtc->s].reason), MSG_NOSIGNAL) < 0)
-			warnlog(rtc, "sending reason failed");
-		if (rtc->monotonic) {
-			gettime_monotonic(&now);
-			timespec_subtract(&now, &rtc->previous_mono, &delta);
-		} else {
-			clock_gettime(CLOCK_REALTIME, &now);
-			timespec_subtract(&now, &rtc->previous_change, &delta);
-		}
-		len = sprintf(io_buf, "\n%ld days %02ld:%02ld:%02ld,%09ld ago",
-			      delta.tv_sec / SECONDS_IN_DAY,
-			      delta.tv_sec % SECONDS_IN_DAY / SECONDS_IN_HOUR,
-			      delta.tv_sec % SECONDS_IN_HOUR / SECONDS_IN_MIN,
-			      delta.tv_sec % SECONDS_IN_MIN, delta.tv_nsec);
-		if (len < 0) {
-			warnlog(rtc, "reason output truncated");
-			return;
-		}
-		if (send(socket, io_buf, len, MSG_NOSIGNAL) < 0)
-			warnlog(rtc, "send failed");
-	}
+	send_message(rtc, socket, time_buf, (size_t) len);
 }
 
 static int open_pid_file(struct runtime_config *restrict rtc)
@@ -232,7 +275,7 @@ static int close_pid_file(struct runtime_config *restrict rtc)
 	char buf[STRERRNO_BUF];
 
 	if (rtc->pid_filefd && close_stream(rtc->pid_filefd)) {
-		if (strerror_r(errno, buf, sizeof(buf)))
+		if (strerror_r(errno, buf, sizeof(buf)) == 0)
 #ifdef HAVE_LIBSYSTEMD
 			sd_journal_send("MESSAGE=closing %s failed", rtc->pid_file, "MESSAGE_ID=%s",
 					SD_ID128_CONST_STR(MESSAGE_ERROR), "STRERROR=%s", buf, "PRIORITY=%d", LOG_ERR,
@@ -314,7 +357,7 @@ static void change_state(struct runtime_config *rtc)
 	struct state_info buf;
 	char *msg = (char *)&buf;
 
-	while (mq_receive(rtc->ipc_mq_event, msg, sizeof(buf), NULL) < 0) {
+	while (mq_receive(rtc->ipc_mq, msg, sizeof(buf), NULL) < 0) {
 		if (errno == EINTR)
 			continue;
 		warnlog(rtc, "receiving ipc message failed");
@@ -359,30 +402,84 @@ static void change_state(struct runtime_config *rtc)
 
 static void wait_events(struct runtime_config *rtc)
 {
-	struct epoll_event events[NUM_EVENTS];
-	int nevents, i;
+	struct io_uring_cqe *cqe;
+	uint64_t data;
+	int client_socket, op_ret, poll_ret;
+	ssize_t bytes;
 
 	for (;;) {
-		nevents = epoll_wait(rtc->epollfd, events, NUM_EVENTS, -1);
-		if (nevents < 0) {
-			if (errno == EINTR)
+		if ((op_ret = io_uring_wait_cqe(&rtc->ring, &cqe)) < 0) {
+			if (op_ret == -EINTR)
 				continue;
-			warnlog(rtc, "epoll_wait failed");
-			continue;
+			errno = -op_ret;
+			faillog(rtc, "io_uring_wait_cqe failed");
 		}
-		for (i = 0; i < nevents; i++) {
-			if (events[i].data.fd == rtc->listen_event) {
-				accept_connection(rtc);
-			} else if (events[i].data.fd == rtc->signal_event) {
-				return;
-			} else if (events[i].data.fd == rtc->ipc_mq_event) {
-				change_state(rtc);
-			} else {
-				write_reason(rtc, events[i].data.fd);
-				epoll_ctl(rtc->epollfd, EPOLL_CTL_DEL, events[i].data.fd, &events[i]);
-				if (close(events[i].data.fd))
-					warnlog(rtc, "socket close");
+		data = cqe->user_data;
+		poll_ret = cqe->res;
+		io_uring_cqe_seen(&rtc->ring, cqe);
+
+		switch (EVENT_SOURCE(data)) {
+		case EVENT_LISTENER:
+			if (poll_ret < 0) {
+				errno = -poll_ret;
+				faillog(rtc, "listener poll operation failed");
 			}
+			if (poll_ret & (POLLERR | POLLHUP | POLLNVAL)) {
+				errno = EIO;
+				faillog(rtc, "listener poll returned an error");
+			}
+			if (poll_ret & POLLIN)
+				accept_connection(rtc);
+			op_ret = submit_poll_event(rtc, rtc->listen_fd, EVENT_DATA(EVENT_LISTENER));
+			if (op_ret < 0) {
+				errno = -op_ret;
+				faillog(rtc, "cannot rearm listener poll operation");
+			}
+			break;
+		case EVENT_SIGNAL:
+			if (poll_ret < 0) {
+				errno = -poll_ret;
+				faillog(rtc, "signal poll operation failed");
+			}
+			if (poll_ret & (POLLERR | POLLNVAL)) {
+				errno = EIO;
+				faillog(rtc, "signal poll returned an error");
+			}
+			return;
+		case EVENT_IPC:
+			if (poll_ret < 0) {
+				errno = -poll_ret;
+				faillog(rtc, "message queue poll operation failed");
+			}
+			if (poll_ret & (POLLERR | POLLHUP | POLLNVAL)) {
+				errno = EIO;
+				faillog(rtc, "message queue poll returned an error");
+			}
+			if (poll_ret & POLLIN)
+				change_state(rtc);
+			op_ret = submit_poll_event(rtc, rtc->ipc_mq, EVENT_DATA(EVENT_IPC));
+			if (op_ret < 0) {
+				errno = -op_ret;
+				faillog(rtc, "cannot rearm message queue poll operation");
+			}
+			break;
+		case EVENT_CLIENT: {
+			char request[sizeof(WHYWHEN)];
+
+			client_socket = EVENT_FD(data);
+			if (poll_ret >= 0 && (poll_ret & POLLIN)) {
+				bytes = recv(client_socket, request, sizeof(request), 0);
+				if (bytes >= (ssize_t)(sizeof(WHYWHEN) - 1))
+					write_reason(rtc, client_socket, request);
+				else if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+					warnlog(rtc, "receive failed");
+			}
+			if (close(client_socket))
+				warnlog(rtc, "socket close");
+			break;
+		}
+		default:
+			abort();
 		}
 	}
 	abort();
@@ -393,14 +490,23 @@ static void stop_server(struct runtime_config *restrict rtc)
 #ifdef HAVE_LIBSYSTEMD
 	sd_notify(0, "STOPPING=1");
 #endif
-	if (rtc->ipc_mq_event) {
-		mq_close(rtc->ipc_mq_event);
-		mq_unlink(rtc->mq_name);
+	if (rtc->ring_initialized) {
+		io_uring_queue_exit(&rtc->ring);
+		rtc->ring_initialized = 0;
 	}
-	if (rtc->listen_event)
-		close(rtc->listen_event);
-	if (rtc->signal_event)
-		close(rtc->signal_event);
+	if (rtc->ipc_mq >= 0) {
+		mq_close(rtc->ipc_mq);
+		mq_unlink(rtc->mq_name);
+		rtc->ipc_mq = -1;
+	}
+	if (rtc->listen_fd >= 0) {
+		close(rtc->listen_fd);
+		rtc->listen_fd = -1;
+	}
+	if (rtc->signal_fd >= 0) {
+		close(rtc->signal_fd);
+		rtc->signal_fd = -1;
+	}
 	if (rtc->res)
 		freeaddrinfo(rtc->res);
 	close_pid_file(rtc);
@@ -422,13 +528,16 @@ static void stop_server(struct runtime_config *restrict rtc)
 
 void start_server(struct runtime_config *restrict rtc)
 {
-	struct epoll_event event;
+	int queue_ret;
 	sigset_t mask;
 	struct state_info buf;
 	struct mq_attr attr = {.mq_maxmsg = 5,.mq_msgsize = sizeof(buf) };
 #ifdef HAVE_LIBSYSTEMD
 	const int ret = sd_listen_fds(0);
 #endif
+	rtc->listen_fd = -1;
+	rtc->signal_fd = -1;
+	rtc->ipc_mq = -1;
 	/* read previous state and reason */
 	clock_gettime(CLOCK_REALTIME, &rtc->previous_change);
 	memcpy(rtc->current[rtc->s].reason, "<program started>", 18);
@@ -438,19 +547,18 @@ void start_server(struct runtime_config *restrict rtc)
 	open_pid_file(rtc);
 	update_pid_file(rtc, rtc->s);
 
-	/* daemonize if needed.  if this is moved after epoll_ctl() calls
-	 * they start to misbehave (possibly because stdin and such are
-	 * closed) */
+	/* daemonize before creating the event loop and its registered file
+	 * descriptors, so the parent process does not retain them */
 	if (!rtc->run_foreground) {
 		if (daemon(0, 0))
 			err(EXIT_FAILURE, "daemon");
 		update_pid_file(rtc, rtc->s);
 	}
 
-	/* open server listen socket and add epoll */
+	/* open server listening socket */
 #ifdef HAVE_LIBSYSTEMD
 	if (ret == 1)
-		rtc->listen_event = SD_LISTEN_FDS_START + 0;
+		rtc->listen_fd = SD_LISTEN_FDS_START + 0;
 	else if (ret < 0)
 		faillog(rtc, "sd_listen_fds() failed");
 	else if (1 < ret)
@@ -460,30 +568,19 @@ void start_server(struct runtime_config *restrict rtc)
 	{
 #endif
 		const int on = 1;
-		if (!(rtc->listen_event = socket(rtc->res->ai_family, SOCK_CLOEXEC | rtc->res->ai_socktype, rtc->res->ai_protocol)))
+		if ((rtc->listen_fd = socket(rtc->res->ai_family, SOCK_CLOEXEC | rtc->res->ai_socktype, rtc->res->ai_protocol)) < 0)
 			faillog(rtc, "cannot create socket");
-		if (setsockopt(rtc->listen_event, SOL_SOCKET, SO_REUSEADDR, (const void *)&on, sizeof(on)))
+		if (setsockopt(rtc->listen_fd, SOL_SOCKET, SO_REUSEADDR, (const void *)&on, sizeof(on)))
 			faillog(rtc, "cannot set socket options");
-		if (bind(rtc->listen_event, rtc->res->ai_addr, rtc->res->ai_addrlen))
+		if (bind(rtc->listen_fd, rtc->res->ai_addr, rtc->res->ai_addrlen))
 			faillog(rtc, "unable to bind");
-		if (make_socket_none_blocking(rtc, rtc->listen_event))
-			faillog(rtc, "cannot set server socket none-blocking");
-		if (listen(rtc->listen_event, SOMAXCONN))
+		if (listen(rtc->listen_fd, SOMAXCONN))
 			faillog(rtc, "unable to listen");
 	}
-#ifdef HAVE_EPOLL_CREATE1
-	if ((rtc->epollfd = epoll_create1(EPOLL_CLOEXEC)) < 0)
-#else
-	if ((rtc->epollfd = epoll_create(NUM_EVENTS)) < 0)
-#endif
-		faillog(rtc, "epoll_create failed");
-	memset(&event, 0, sizeof event);
-	event.events = EPOLLIN;
-	event.data.fd = rtc->listen_event;
-	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, rtc->listen_event, &event) < 0)
-		faillog(rtc, "epoll_ctl add socket failed");
+	if (make_socket_none_blocking(rtc, rtc->listen_fd))
+		faillog(rtc, "cannot set server socket none-blocking");
 
-	/* setup signalfd epoll */
+	/* setup signalfd */
 	sigemptyset(&mask);
 #ifdef SIGHUP
 	sigaddset(&mask, SIGHUP);
@@ -505,20 +602,34 @@ void start_server(struct runtime_config *restrict rtc)
 #endif
 	if (sigprocmask(SIG_BLOCK, &mask, NULL) == -1)
 		faillog(rtc, "sigprocmask");
-	if ((rtc->signal_event = signalfd(-1, &mask, SFD_CLOEXEC)) < 0)
+	if ((rtc->signal_fd = signalfd(-1, &mask, SFD_CLOEXEC)) < 0)
 		faillog(rtc, "signalfd");
-	event.events = EPOLLIN | EPOLLONESHOT;
-	event.data.fd = rtc->signal_event;
-	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, rtc->signal_event, &event) < 0)
-		faillog(rtc, "epoll_ctl add signal failed");
 
-	/* setup IPC epoll that used for state changes */
-	if ((rtc->ipc_mq_event = mq_open(rtc->mq_name, O_CREAT | O_RDONLY | O_CLOEXEC, 0600, &attr)) == (mqd_t) - 1)
+	/* setup IPC used for state changes */
+	if ((rtc->ipc_mq = mq_open(rtc->mq_name, O_CREAT | O_RDONLY | O_CLOEXEC, 0600, &attr)) == (mqd_t) - 1)
 		faillog(rtc, "could not create message queue");
-	event.events = EPOLLIN;
-	event.data.fd = rtc->ipc_mq_event;
-	if (epoll_ctl(rtc->epollfd, EPOLL_CTL_ADD, rtc->ipc_mq_event, &event) < 0)
-		faillog(rtc, "epoll add message queue failed");
+
+	/* initialize io_uring after daemonizing and opening permanent sources */
+	if ((queue_ret = io_uring_queue_init(IO_URING_QUEUE_DEPTH, &rtc->ring, 0)) < 0) {
+		errno = -queue_ret;
+		faillog(rtc, "io_uring queue initialization failed");
+	}
+	rtc->ring_initialized = 1;
+	queue_ret = submit_poll_event(rtc, rtc->listen_fd, EVENT_DATA(EVENT_LISTENER));
+	if (queue_ret < 0) {
+		errno = -queue_ret;
+		faillog(rtc, "io_uring poll_add listener failed");
+	}
+	queue_ret = submit_poll_event(rtc, rtc->signal_fd, EVENT_DATA(EVENT_SIGNAL));
+	if (queue_ret < 0) {
+		errno = -queue_ret;
+		faillog(rtc, "io_uring poll_add signal failed");
+	}
+	queue_ret = submit_poll_event(rtc, rtc->ipc_mq, EVENT_DATA(EVENT_IPC));
+	if (queue_ret < 0) {
+		errno = -queue_ret;
+		faillog(rtc, "io_uring poll_add message queue failed");
+	}
 
 	/* tell systemd the software has started */
 #ifdef HAVE_LIBSYSTEMD
